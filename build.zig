@@ -75,7 +75,12 @@ pub fn build(b: *std.Build) !void {
     const libxauSource = libxau.builder.dependency("libxau", .{});
     const xorgprotoSource = libxau.builder.dependency("xorgproto", .{});
 
+    const xcbUtilSource = b.dependency("xcb-util", .{});
+    const xcbUtilImageSource = b.dependency("xcb-util-image", .{});
+
     const python3 = try b.findProgram(&.{ "python3", "python" }, &.{});
+
+    const headers = b.addWriteFiles();
 
     const xcbprotoPath = blk: {
         var man = b.cache.obtain();
@@ -117,6 +122,12 @@ pub fn build(b: *std.Build) !void {
                     xcbprotoSource.path(".").getPath(xcbprotoSource.builder),
                     xcbprotoSource.path(try std.fs.path.join(b.allocator, &.{ "src", entry.name })).getPath(xcbprotoSource.builder),
                 }, cachePath);
+
+                const header = b.fmt("{s}.h", .{entry.name[0..(entry.name.len - 4)]});
+
+                _ = headers.addCopyFile(.{
+                    .path = try std.fs.path.join(b.allocator, &.{ cachePath, header }),
+                }, try std.fs.path.join(b.allocator, &.{ "xcb", header }));
             }
 
             try man.writeManifest();
@@ -124,9 +135,46 @@ pub fn build(b: *std.Build) !void {
             break :blk cachePath;
         } else {
             const digest = man.final();
+            const cachePath = try b.cache_root.join(b.allocator, &.{ "o", &digest });
+
+            iter = dir.iterate();
+            while (try iter.next()) |entry| {
+                if (!std.mem.endsWith(u8, entry.name, ".xml")) continue;
+
+                const header = b.fmt("{s}.h", .{entry.name[0..(entry.name.len - 4)]});
+
+                _ = headers.addCopyFile(.{
+                    .path = try std.fs.path.join(b.allocator, &.{ cachePath, header }),
+                }, try std.fs.path.join(b.allocator, &.{ "xcb", header }));
+            }
+
             break :blk try b.cache_root.join(b.allocator, &.{ "o", &digest });
         }
     };
+
+    {
+        var dir = try std.fs.openDirAbsolute(xorgprotoSource.path("include").getPath(xorgprotoSource.builder), .{ .iterate = true });
+        defer dir.close();
+
+        var iter = try dir.walk(b.allocator);
+        defer iter.deinit();
+
+        while (try iter.next()) |entry| {
+            if (std.mem.eql(u8, entry.basename, "meson.build")) continue;
+            if (entry.kind != .file) continue;
+
+            _ = headers.addCopyFile(xorgprotoSource.path(try std.fs.path.join(b.allocator, &.{ "include", entry.path })), entry.path);
+        }
+    }
+
+    _ = headers.addCopyFile(libxcbSource.path("src/xcb.h"), "xcb/xcb.h");
+    _ = headers.addCopyFile(xcbUtilSource.path("src/xcb_atom.h"), "xcb/xcb_atom.h");
+    _ = headers.addCopyFile(xcbUtilSource.path("src/xcb_aux.h"), "xcb/xcb_aux.h");
+    _ = headers.addCopyFile(xcbUtilSource.path("src/xcb_event.h"), "xcb/xcb_event.h");
+    _ = headers.addCopyFile(xcbUtilSource.path("src/xcb_util.h"), "xcb/xcb_util.h");
+    _ = headers.addCopyFile(xcbUtilImageSource.path("image/xcb_bitops.h"), "xcb/xcb_bitops.h");
+    _ = headers.addCopyFile(xcbUtilImageSource.path("image/xcb_image.h"), "xcb/xcb_image.h");
+    _ = headers.addCopyFile(xcbUtilImageSource.path("image/xcb_pixel.h"), "xcb/xcb_pixel.h");
 
     const libxcb = std.Build.Step.Compile.create(b, .{
         .name = "xcb",
@@ -167,6 +215,77 @@ pub fn build(b: *std.Build) !void {
     libxcb.linkLibrary(libxau.artifact("Xau"));
     b.installArtifact(libxcb);
 
+    const libxcbShm = std.Build.Step.Compile.create(b, .{
+        .name = "xcb-shm",
+        .root_module = .{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        },
+        .kind = .lib,
+        .linkage = linkage,
+    });
+
+    libxcbShm.addIncludePath(libxcbSource.path("src"));
+    libxcbShm.addIncludePath(libxauSource.path("include"));
+    libxcbShm.addIncludePath(xorgprotoSource.path("include"));
+    libxcbShm.addIncludePath(.{ .path = xcbprotoPath });
+
+    libxcbShm.addCSourceFiles(.{
+        .files = &.{
+            try std.fs.path.join(b.allocator, &.{ xcbprotoPath, "shm.c" }),
+        },
+    });
+
+    libxcbShm.linkLibrary(libxcb);
+    b.installArtifact(libxcbShm);
+
+    const xcbutil = std.Build.Step.Compile.create(b, .{
+        .name = "xcb-util",
+        .root_module = .{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        },
+        .kind = .lib,
+        .linkage = linkage,
+    });
+
+    xcbutil.addIncludePath(headers.getDirectory());
+
+    xcbutil.addCSourceFiles(.{
+        .files = &.{
+            xcbUtilSource.path("src/atoms.c").getPath(xcbUtilSource.builder),
+            xcbUtilSource.path("src/event.c").getPath(xcbUtilSource.builder),
+            xcbUtilSource.path("src/xcb_aux.c").getPath(xcbUtilSource.builder),
+        },
+    });
+
+    b.installArtifact(xcbutil);
+
+    const xcbutilImage = std.Build.Step.Compile.create(b, .{
+        .name = "xcb-image",
+        .root_module = .{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        },
+        .kind = .lib,
+        .linkage = linkage,
+    });
+
+    xcbutilImage.addIncludePath(headers.getDirectory());
+
+    xcbutilImage.addCSourceFiles(.{
+        .files = &.{
+            xcbUtilImageSource.path("image/xcb_image.c").getPath(xcbUtilImageSource.builder),
+        },
+    });
+
+    xcbutilImage.linkLibrary(xcbutil);
+    xcbutilImage.linkLibrary(libxcbShm);
+    b.installArtifact(xcbutilImage);
+
     const module = b.addModule("xcb", .{
         .root_source_file = .{
             .path = b.pathFromRoot("xcb.zig"),
@@ -176,11 +295,9 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
 
-    module.addIncludePath(libxcbSource.path("src"));
-    module.addIncludePath(libxauSource.path("include"));
-    module.addIncludePath(xorgprotoSource.path("include"));
-    module.addIncludePath(.{ .path = xcbprotoPath });
+    module.addIncludePath(headers.getDirectory());
     module.linkLibrary(libxcb);
+    module.linkLibrary(xcbutilImage);
 
     const step_test = b.step("test", "Run all unit tests");
 
@@ -193,11 +310,9 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
 
-    unit_tests.addIncludePath(libxcbSource.path("src"));
-    unit_tests.addIncludePath(libxauSource.path("include"));
-    unit_tests.addIncludePath(xorgprotoSource.path("include"));
-    unit_tests.addIncludePath(.{ .path = xcbprotoPath });
+    unit_tests.addIncludePath(headers.getDirectory());
     unit_tests.linkLibrary(libxcb);
+    unit_tests.linkLibrary(xcbutilImage);
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
     step_test.dependOn(&run_unit_tests.step);

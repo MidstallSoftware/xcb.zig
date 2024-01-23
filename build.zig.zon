@@ -15,5 +15,13 @@
       .url = "https://github.com/MidstallSoftware/libxau.zig/archive/163efcfb35434094f4fb88e56cef75b06de3ca75.tar.gz",
       .hash = "12206866e91f823e654acb15b2a3dfbf1712b13f5a03f2c3b4f7f6da6113ec6c3568",
     },
+    .@"xcb-util" = .{
+      .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb-util/-/archive/xcb-util-0.4.1/libxcb-util-xcb-util-0.4.1.tar.gz",
+      .hash = "1220096cb9b583a14b307609801d8a018a3babc9e608170afc521a0db4e437165c15",
+    },
+    .@"xcb-util-image" = .{
+      .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb-image/-/archive/xcb-util-image-0.4.1/libxcb-image-xcb-util-image-0.4.1.tar.gz",
+      .hash = "122092beed2990a3b55f6ad7984159e2e53ef2372ecd36d95deeda007ee3903a6797",
+    },
   },
 }
