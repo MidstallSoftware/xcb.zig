@@ -1,0 +1,19 @@
+.{
+  .name = "xcb.zig",
+  .version = "0.1.16",
+  .paths = .{""},
+  .dependencies = .{
+    .libxcb = .{
+      .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb/-/archive/libxcb-1.16/libxcb-libxcb-1.16.tar.gz",
+      .hash = "1220c6c1f5516d0fe1ca72f5391f7f00f3114c0761cedeccbeeb5d8e7efaefc87fbc",
+    },
+    .xcbproto = .{
+      .url = "https://gitlab.freedesktop.org/xorg/proto/xcbproto/-/archive/xcb-proto-1.16.0/xcbproto-xcb-proto-1.16.0.tar.gz",
+      .hash = "122088858bfa13f990603440f3b13aa027abfa828de875497fcb58efd017fe0af6ea",
+    },
+    .libxau = .{
+      .url = "https://github.com/MidstallSoftware/libxau.zig/archive/163efcfb35434094f4fb88e56cef75b06de3ca75.tar.gz",
+      .hash = "12206866e91f823e654acb15b2a3dfbf1712b13f5a03f2c3b4f7f6da6113ec6c3568",
+    },
+  },
+}
