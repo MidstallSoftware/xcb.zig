@@ -130,7 +130,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
         if (child != .element) continue;
 
         const el = child.element;
-        if (std.mem.eql(u8, el.tag, "request")) continue;
+        if (std.mem.eql(u8, el.tag, "request") or std.mem.eql(u8, el.tag, "xidtype") or std.mem.eql(u8, el.tag, "errorcopy") or std.mem.eql(u8, el.tag, "error")) continue;
 
         const elName = el.getAttribute("name") orelse continue;
 
