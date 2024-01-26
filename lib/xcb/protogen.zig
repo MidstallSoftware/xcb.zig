@@ -98,66 +98,78 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
         \\const Connection = conn.Connection;
         \\const Self = @This();
         \\
-        \\usingnamespace struct {
-        \\  pub const CARD8 = u8;
-        \\  pub const CARD16 = u16;
-        \\  pub const CARD32 = u32;
-        \\  pub const INT8 = i8;
-        \\  pub const INT16 = i16;
-        \\  pub const INT32 = i32;
-        \\  pub const INT64 = i64;
-        \\  pub const BYTE = u8;
-        \\  pub const BOOL = u8;
-        \\  pub const char = c_char;
-        \\  pub const float = f32;
-        \\  pub const double = f64;
+        \\const CARD8 = u8;
+        \\const CARD16 = u16;
+        \\const CARD32 = u32;
+        \\const INT8 = i8;
+        \\const INT16 = i16;
+        \\const INT32 = i32;
+        \\const INT64 = i64;
+        \\const BYTE = u8;
+        \\const BOOL = u8;
+        \\const char = c_char;
+        \\const float = f32;
+        \\const double = f64;
+        \\
         \\
     );
 
-    for (doc.root.children) |child| {
-        if (child != .element) continue;
-        if (!std.mem.eql(u8, child.element.tag, "import")) continue;
-
-        try outputFile.writer().print(
-            \\  pub usingnamespace @import("{s}.zig");
-            \\
-        , .{child.element.children[0].char_data});
+    {
+        var iter = doc.root.findChildrenByTag("import");
+        while (iter.next()) |el| {
+            try outputFile.writer().print(
+                \\usingnamespace @import("{s}.zig");
+                \\
+            , .{el.children[0].char_data});
+        }
     }
 
-    try outputFile.writer().writeAll("};");
+    try outputFile.writer().print(
+        \\
+        \\  const {s} = struct {{
+        \\
+    , .{name[0..(name.len - 4)]});
 
-    for (doc.root.children) |child| {
-        if (child != .element) continue;
+    {
+        var iter = doc.root.findChildrenByTag("typedef");
+        while (iter.next()) |el| {
+            const oldName = el.getAttribute("oldname") orelse return error.AttributeNotFound;
+            const newName = el.getAttribute("newname") orelse return error.AttributeNotFound;
 
-        const el = child.element;
-        if (std.mem.eql(u8, el.tag, "request") or std.mem.eql(u8, el.tag, "xidtype") or std.mem.eql(u8, el.tag, "errorcopy") or std.mem.eql(u8, el.tag, "error")) continue;
+            try outputFile.writer().print(
+                \\      const {s} = Self.{s};
+                \\
+            , .{ newName, oldName });
+        }
+    }
 
-        const elName = el.getAttribute("name") orelse continue;
+    {
+        var iter = doc.root.findChildrenByTag("struct");
+        while (iter.next()) |el| {
+            const elName = el.getAttribute("name") orelse return error.AttributeNotFound;
+            try outputFile.writer().print("\npub const {s} = extern struct {{\n", .{elName});
 
-        try outputFile.writer().print("\npub const {s} = ", .{elName});
+            var fieldIter = el.findChildrenByTag("field");
+            while (fieldIter.next()) |fieldEl| {
+                const fieldName = fieldEl.getAttribute("name") orelse return error.AttributeNotFound;
+                const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
 
-        if (std.mem.eql(u8, el.tag, "struct")) {
-            try outputFile.writer().writeAll("struct {");
+                try outputFile.writer().print("         {s}: ", .{fieldName});
 
-            for (el.children) |child2| {
-                if (child2 != .element) continue;
-                if (!std.mem.eql(u8, child2.element.tag, "field")) continue;
-
-                const fieldName = child2.element.getAttribute("name") orelse continue;
-                const fieldType = child2.element.getAttribute("type") orelse continue;
-
-                try outputFile.writer().print(
-                    \\  {s}: Self.{s},
-                , .{ fieldName, fieldType });
+                if (std.mem.indexOf(u8, fieldType, ":")) |i| {
+                    try outputFile.writer().print("{s}.{s},\n", .{ fieldType[0..i], fieldType[(i + 1)..] });
+                } else {
+                    try outputFile.writer().print("Self.{s},\n", .{fieldType});
+                }
             }
 
-            try outputFile.writer().writeByte('}');
-        } else if (std.mem.eql(u8, el.tag, "xidtype")) {
-            try outputFile.writer().writeAll("u32");
-        } else {
-            try outputFile.writer().writeAll("opaque {}");
+            try outputFile.writer().writeAll("};\n");
         }
-
-        try outputFile.writer().writeAll(";\n");
     }
+
+    try outputFile.writer().print(
+        \\}};
+        \\
+        \\pub usingnamespace {s};
+    , .{name[0..(name.len - 4)]});
 }
