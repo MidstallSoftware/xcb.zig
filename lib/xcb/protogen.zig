@@ -6,6 +6,21 @@ step: std.Build.Step,
 source: std.Build.LazyPath,
 output: std.Build.GeneratedFile,
 
+fn makeSnakeCase(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
+    var output = std.ArrayList(u8).init(alloc);
+    errdefer output.deinit();
+
+    for (input) |ch| {
+        if (std.ascii.isUpper(ch)) {
+            try output.append('_');
+            try output.append(std.ascii.toLower(ch));
+        } else {
+            try output.append(ch);
+        }
+    }
+    return try output.toOwnedSlice();
+}
+
 pub fn create(b: *std.Build, source: std.Build.LazyPath) *Self {
     const self = b.allocator.create(Self) catch @panic("OOM");
     errdefer b.allocator.destroy(self);
@@ -87,6 +102,8 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     var outputFile = try cache_dir.createFile(name, .{});
     defer outputFile.close();
 
+    errdefer std.debug.print("{s}/{s}\n", .{ cache_path, name });
+
     if (!std.mem.eql(u8, doc.root.tag, "xcb")) {
         return step.fail("not an xcb protocol, root tag is {s}, expected xcb", .{
             doc.root.tag,
@@ -119,8 +136,9 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
         while (iter.next()) |el| {
             try outputFile.writer().print(
                 \\usingnamespace @import("{s}.zig");
+                \\pub const {s} = @import("{s}.zig");
                 \\
-            , .{el.children[0].char_data});
+            , .{ el.children[0].char_data, el.children[0].char_data, el.children[0].char_data });
         }
     }
 
@@ -164,6 +182,96 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
             }
 
             try outputFile.writer().writeAll("};\n");
+        }
+    }
+
+    {
+        var iter = doc.root.findChildrenByTag("request");
+        while (iter.next()) |el| {
+            const elName = el.getAttribute("name") orelse return error.AttributeNotFound;
+            const snakeName = try makeSnakeCase(b.allocator, elName);
+            defer b.allocator.free(snakeName);
+
+            if (el.findChildByTag("reply")) |elReply| {
+                try outputFile.writer().print(
+                    \\
+                    \\pub const {s}Cookie = extern struct {{
+                    \\  seq: c_uint,
+                    \\
+                    \\  extern fn xcb{s}_reply(*Connection, {s}Cookie, *?*conn.GenericError) ?*{s}Reply;
+                    \\  pub inline fn reply(self: {s}Cookie, conn: *Connection) !*{s}Reply {{
+                    \\      var err: ?*conn.GenericError = null;
+                    \\      const ret = xcb{s}_reply(conn, self, &err);
+                    \\      if (err == null) {{
+                    \\          std.debug.assert(ret == null);
+                    \\          return error.GenericError;
+                    \\      }}
+                    \\
+                    \\      std.debug.assert(ret != null);
+                    \\      return ret.?;
+                    \\  }}
+                    \\}};
+                    \\
+                    \\pub const {s}Reply = extern struct {{
+                    \\  response_type: u8,
+                    \\  pad0: u8,
+                    \\  seq: u16,
+                    \\  len: u32,
+                    \\
+                , .{
+                    elName,
+                    snakeName,
+                    elName,
+                    elName,
+                    elName,
+                    elName,
+                    snakeName,
+                    elName,
+                });
+
+                for (elReply.children, 0..) |elReplyChild, i| {
+                    if (elReplyChild != .element) continue;
+
+                    const elReplyChildEl = elReplyChild.element;
+                    if (std.mem.eql(u8, elReplyChildEl.tag, "pad")) {
+                        const bytes = try std.fmt.parseInt(usize, elReplyChildEl.getAttribute("bytes") orelse continue, 10);
+                        if (bytes == 1 and i == 0) continue;
+
+                        try outputFile.writer().print("pad{}: [{}]u8", .{ i, bytes });
+                    } else if (std.mem.eql(u8, elReplyChildEl.tag, "field")) {
+                        const fieldName = elReplyChildEl.getAttribute("name") orelse return error.AttributeNotFound;
+                        const fieldType = elReplyChildEl.getAttribute("type") orelse return error.AttributeNotFound;
+
+                        try outputFile.writer().print("         {s}: ", .{fieldName});
+
+                        if (std.mem.indexOf(u8, fieldType, ":")) |x| {
+                            try outputFile.writer().print("{s}.{s},\n", .{ fieldType[0..x], fieldType[(x + 1)..] });
+                        } else {
+                            try outputFile.writer().print("Self.{s},\n", .{fieldType});
+                        }
+                    }
+                }
+            }
+
+            try outputFile.writer().print("\n}};\nextern fn xcb{s}(*Connection", .{snakeName});
+
+            var fieldIter = el.findChildrenByTag("field");
+            while (fieldIter.next()) |fieldEl| {
+                const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
+                if (std.mem.indexOf(u8, fieldType, ":")) |i| {
+                    try outputFile.writer().print(", {s}.{s}", .{ fieldType[0..i], fieldType[(i + 1)..] });
+                } else {
+                    try outputFile.writer().print(", Self.{s}", .{fieldType});
+                }
+            }
+
+            if (el.findChildByTag("reply")) |_| {
+                try outputFile.writer().print(") {s}Cookie;", .{elName});
+            } else {
+                try outputFile.writer().writeAll(") conn.VoidCookie;");
+            }
+
+            try outputFile.writer().print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
         }
     }
 

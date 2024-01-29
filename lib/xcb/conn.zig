@@ -132,8 +132,8 @@ pub const Connection = extern struct {
     extern fn xcb_disconnect(*Connection) void;
     pub const disconnect = xcb_disconnect;
 
-    extern fn xcb_connect([*:0]u8, ?*c_int) ?*Connection;
-    pub fn connect(display: [*:0]u8, pscrn: ?*c_int) !*Connection {
+    extern fn xcb_connect(?[*:0]u8, ?*c_int) ?*Connection;
+    pub fn connect(display: ?[*:0]u8, pscrn: ?*c_int) !*Connection {
         return xcb_connect(display, pscrn) orelse error.ConnectionFailed;
     }
 
