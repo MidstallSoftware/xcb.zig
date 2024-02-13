@@ -1,27 +1,27 @@
 .{
-  .name = "xcb.zig",
-  .version = "0.1.16",
-  .paths = .{""},
-  .dependencies = .{
-    .libxcb = .{
-      .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb/-/archive/libxcb-1.16/libxcb-libxcb-1.16.tar.gz",
-      .hash = "1220c6c1f5516d0fe1ca72f5391f7f00f3114c0761cedeccbeeb5d8e7efaefc87fbc",
+    .name = "xcb.zig",
+    .version = "0.1.16",
+    .paths = .{""},
+    .dependencies = .{
+        .libxcb = .{
+            .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb/-/archive/libxcb-1.16/libxcb-libxcb-1.16.tar.gz",
+            .hash = "1220c6c1f5516d0fe1ca72f5391f7f00f3114c0761cedeccbeeb5d8e7efaefc87fbc",
+        },
+        .xcbproto = .{
+            .url = "https://gitlab.freedesktop.org/xorg/proto/xcbproto/-/archive/xcb-proto-1.16.0/xcbproto-xcb-proto-1.16.0.tar.gz",
+            .hash = "122088858bfa13f990603440f3b13aa027abfa828de875497fcb58efd017fe0af6ea",
+        },
+        .libxau = .{
+            .url = "https://github.com/MidstallSoftware/libxau.zig/archive/4c4ef2d994dfd26a32998b2af59d39d5ec793163.tar.gz",
+            .hash = "12207191f6945322e4685a14a1989100bb859be34f0fc9fa0a1ef1d0fac1feea1b8e",
+        },
+        .@"xcb-util" = .{
+            .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb-util/-/archive/xcb-util-0.4.1/libxcb-util-xcb-util-0.4.1.tar.gz",
+            .hash = "1220096cb9b583a14b307609801d8a018a3babc9e608170afc521a0db4e437165c15",
+        },
+        .@"xcb-util-image" = .{
+            .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb-image/-/archive/xcb-util-image-0.4.1/libxcb-image-xcb-util-image-0.4.1.tar.gz",
+            .hash = "122092beed2990a3b55f6ad7984159e2e53ef2372ecd36d95deeda007ee3903a6797",
+        },
     },
-    .xcbproto = .{
-      .url = "https://gitlab.freedesktop.org/xorg/proto/xcbproto/-/archive/xcb-proto-1.16.0/xcbproto-xcb-proto-1.16.0.tar.gz",
-      .hash = "122088858bfa13f990603440f3b13aa027abfa828de875497fcb58efd017fe0af6ea",
-    },
-    .libxau = .{
-      .url = "https://github.com/MidstallSoftware/libxau.zig/archive/163efcfb35434094f4fb88e56cef75b06de3ca75.tar.gz",
-      .hash = "12206866e91f823e654acb15b2a3dfbf1712b13f5a03f2c3b4f7f6da6113ec6c3568",
-    },
-    .@"xcb-util" = .{
-      .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb-util/-/archive/xcb-util-0.4.1/libxcb-util-xcb-util-0.4.1.tar.gz",
-      .hash = "1220096cb9b583a14b307609801d8a018a3babc9e608170afc521a0db4e437165c15",
-    },
-    .@"xcb-util-image" = .{
-      .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb-image/-/archive/xcb-util-image-0.4.1/libxcb-image-xcb-util-image-0.4.1.tar.gz",
-      .hash = "122092beed2990a3b55f6ad7984159e2e53ef2372ecd36d95deeda007ee3903a6797",
-    },
-  },
 }

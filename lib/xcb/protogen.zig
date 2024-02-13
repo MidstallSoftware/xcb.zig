@@ -44,7 +44,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     const b = step.owner;
     const self = @fieldParentPtr(Self, "step", step);
 
-    var man = b.cache.obtain();
+    var man = b.graph.cache.obtain();
     defer man.deinit();
 
     const path = self.source.getPath2(b, step);

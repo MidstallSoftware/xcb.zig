@@ -20,7 +20,7 @@ fn runAllowFail(
     child.stdin_behavior = .Ignore;
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = stderr_behavior;
-    child.env_map = self.env_map;
+    child.env_map = &self.graph.env_map;
     child.cwd = cwd;
 
     try child.spawn();
@@ -86,7 +86,7 @@ pub fn build(b: *std.Build) !void {
     const moduleSource = b.addWriteFiles();
 
     const xcbprotoPath = blk: {
-        var man = b.cache.obtain();
+        var man = b.graph.cache.obtain();
         defer man.deinit();
 
         const xcbprotoSourcePath = xcbprotoSource.path("src").getPath(xcbprotoSource.builder);
@@ -207,6 +207,12 @@ pub fn build(b: *std.Build) !void {
         .kind = .lib,
         .linkage = linkage,
     });
+
+    for (headers.files.items) |header| {
+        const install_file = b.addInstallFileWithDir(header.getPath(), .header, header.sub_path);
+        b.getInstallStep().dependOn(&install_file.step);
+        libxcb.installed_headers.append(&install_file.step) catch @panic("OOM");
+    }
 
     libxcb.addIncludePath(libxcbSource.path("src"));
     libxcb.addIncludePath(libxauSource.path("include"));
