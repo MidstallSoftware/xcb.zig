@@ -111,8 +111,8 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     }
 
     try outputFile.writer().writeAll(
-        \\const conn = @import("../conn.zig");
-        \\const Connection = conn.Connection;
+        \\const connection = @import("../conn.zig");
+        \\const Connection = connection.Connection;
         \\const Self = @This();
         \\
         \\const CARD8 = u8;
@@ -198,7 +198,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
                     \\pub const {s}Cookie = extern struct {{
                     \\  seq: c_uint,
                     \\
-                    \\  extern fn xcb{s}_reply(*Connection, {s}Cookie, *?*conn.GenericError) ?*{s}Reply;
+                    \\  extern fn xcb{s}_reply(*Connection, {s}Cookie, *?*connection.GenericError) ?*{s}Reply;
                     \\  pub inline fn reply(self: {s}Cookie, conn: *Connection) !*{s}Reply {{
                     \\      var err: ?*conn.GenericError = null;
                     \\      const ret = xcb{s}_reply(conn, self, &err);
@@ -237,7 +237,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
                         const bytes = try std.fmt.parseInt(usize, elReplyChildEl.getAttribute("bytes") orelse continue, 10);
                         if (bytes == 1 and i == 0) continue;
 
-                        try outputFile.writer().print("pad{}: [{}]u8", .{ i, bytes });
+                        try outputFile.writer().print("pad{}: [{}]u8,\n", .{ i, bytes });
                     } else if (std.mem.eql(u8, elReplyChildEl.tag, "field")) {
                         const fieldName = elReplyChildEl.getAttribute("name") orelse return error.AttributeNotFound;
                         const fieldType = elReplyChildEl.getAttribute("type") orelse return error.AttributeNotFound;
@@ -268,7 +268,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
             if (el.findChildByTag("reply")) |_| {
                 try outputFile.writer().print(") {s}Cookie;", .{elName});
             } else {
-                try outputFile.writer().writeAll(") conn.VoidCookie;");
+                try outputFile.writer().writeAll(") connection.VoidCookie;");
             }
 
             try outputFile.writer().print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
