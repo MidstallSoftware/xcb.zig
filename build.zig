@@ -73,7 +73,11 @@ pub fn build(b: *std.Build) !void {
     const libxcbSource = b.dependency("libxcb", .{});
     const xcbprotoSource = b.dependency("xcbproto", .{});
 
-    const libxau = b.dependency("libxau", .{});
+    const libxau = b.dependency("libxau", .{
+        .target = target,
+        .optimize = optimize,
+        .linkage = linkage,
+    });
     const libxauSource = libxau.builder.dependency("libxau", .{});
     const xorgprotoSource = libxau.builder.dependency("xorgproto", .{});
 
