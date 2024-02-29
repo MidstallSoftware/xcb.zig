@@ -68,7 +68,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const no_docs = b.option(bool, "no-docs", "skip installing documentation") orelse false;
-    const linkage = b.option(std.Build.Step.Compile.Linkage, "linkage", "whether to statically or dynamically link the library") orelse .static;
+    const linkage = b.option(std.builtin.LinkMode, "linkage", "whether to statically or dynamically link the library") orelse .static;
 
     const libxcbSource = b.dependency("libxcb", .{});
     const xcbprotoSource = b.dependency("xcbproto", .{});
@@ -220,18 +220,29 @@ pub fn build(b: *std.Build) !void {
     libxcb.addIncludePath(.{ .path = xcbprotoPath });
 
     libxcb.addCSourceFiles(.{
+        .root = libxcbSource.path("."),
         .files = &.{
-            libxcbSource.path("src/xcb_auth.c").getPath(libxcbSource.builder),
-            libxcbSource.path("src/xcb_conn.c").getPath(libxcbSource.builder),
-            libxcbSource.path("src/xcb_ext.c").getPath(libxcbSource.builder),
-            libxcbSource.path("src/xcb_in.c").getPath(libxcbSource.builder),
-            libxcbSource.path("src/xcb_list.c").getPath(libxcbSource.builder),
-            libxcbSource.path("src/xcb_out.c").getPath(libxcbSource.builder),
-            libxcbSource.path("src/xcb_util.c").getPath(libxcbSource.builder),
-            libxcbSource.path("src/xcb_xid.c").getPath(libxcbSource.builder),
-            try std.fs.path.join(b.allocator, &.{ xcbprotoPath, "bigreq.c" }),
-            try std.fs.path.join(b.allocator, &.{ xcbprotoPath, "xc_misc.c" }),
-            try std.fs.path.join(b.allocator, &.{ xcbprotoPath, "xproto.c" }),
+            "src/xcb_auth.c",
+            "src/xcb_conn.c",
+            "src/xcb_ext.c",
+            "src/xcb_in.c",
+            "src/xcb_list.c",
+            "src/xcb_out.c",
+            "src/xcb_util.c",
+            "src/xcb_xid.c",
+        },
+        .flags = &.{
+            "-DXCB_QUEUE_BUFFER_SIZE=16384",
+            "-DIOV_MAX=16",
+        },
+    });
+
+    libxcb.addCSourceFiles(.{
+        .root = .{ .path = xcbprotoPath },
+        .files = &.{
+            "bigreq.c",
+            "xc_misc.c",
+            "xproto.c",
         },
         .flags = &.{
             "-DXCB_QUEUE_BUFFER_SIZE=16384",
@@ -259,9 +270,8 @@ pub fn build(b: *std.Build) !void {
     libxcbShm.addIncludePath(.{ .path = xcbprotoPath });
 
     libxcbShm.addCSourceFiles(.{
-        .files = &.{
-            try std.fs.path.join(b.allocator, &.{ xcbprotoPath, "shm.c" }),
-        },
+        .root = .{ .path = xcbprotoPath },
+        .files = &.{"shm.c"},
     });
 
     libxcbShm.linkLibrary(libxcb);
@@ -281,10 +291,11 @@ pub fn build(b: *std.Build) !void {
     xcbutil.addIncludePath(headers.getDirectory());
 
     xcbutil.addCSourceFiles(.{
+        .root = xcbUtilSource.path("src"),
         .files = &.{
-            xcbUtilSource.path("src/atoms.c").getPath(xcbUtilSource.builder),
-            xcbUtilSource.path("src/event.c").getPath(xcbUtilSource.builder),
-            xcbUtilSource.path("src/xcb_aux.c").getPath(xcbUtilSource.builder),
+            "atoms.c",
+            "event.c",
+            "xcb_aux.c",
         },
     });
 
@@ -304,8 +315,9 @@ pub fn build(b: *std.Build) !void {
     xcbutilImage.addIncludePath(headers.getDirectory());
 
     xcbutilImage.addCSourceFiles(.{
+        .root = xcbUtilImageSource.path("image"),
         .files = &.{
-            xcbUtilImageSource.path("image/xcb_image.c").getPath(xcbUtilImageSource.builder),
+            "xcb_image.c",
         },
     });
 
