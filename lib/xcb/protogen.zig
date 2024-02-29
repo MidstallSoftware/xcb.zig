@@ -281,4 +281,6 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
         \\
         \\pub usingnamespace {s};
     , .{name[0..(name.len - 4)]});
+
+    try step.writeManifest(&man);
 }
