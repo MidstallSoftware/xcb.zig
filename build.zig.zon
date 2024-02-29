@@ -12,8 +12,8 @@
             .hash = "122088858bfa13f990603440f3b13aa027abfa828de875497fcb58efd017fe0af6ea",
         },
         .libxau = .{
-            .url = "https://github.com/MidstallSoftware/libxau.zig/archive/79670430287fce6ca97fc62874daae0e3eadfd40.tar.gz",
-            .hash = "12203f6c9059bcb270fe7585a45673ef4e1093e13c2dbb950c49fad962e226ed0f1a",
+            .url = "https://github.com/MidstallSoftware/libxau.zig/archive/a8adbbd1a687cb460dcb0356b973c740d6dc4c36.tar.gz",
+            .hash = "1220a0ccc00ff9ee2df9ae313345dd93af2a8876772f127e8bc5c90eca7bd2547c34",
         },
         .@"xcb-util" = .{
             .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb-util/-/archive/xcb-util-0.4.1/libxcb-util-xcb-util-0.4.1.tar.gz",
