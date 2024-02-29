@@ -243,7 +243,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
                         const fieldName = elReplyChildEl.getAttribute("name") orelse return error.AttributeNotFound;
                         const fieldType = elReplyChildEl.getAttribute("type") orelse return error.AttributeNotFound;
 
-                        try outputFile.writer().print("         {s}: ", .{fieldName});
+                        try outputFile.writer().print("         @\"{s}\": ", .{fieldName});
 
                         if (std.mem.indexOf(u8, fieldType, ":")) |x| {
                             try outputFile.writer().print("{s}.{s},\n", .{ fieldType[0..x], fieldType[(x + 1)..] });
@@ -273,6 +273,10 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
             }
 
             try outputFile.writer().print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
+
+            if (el.findChildByTag("reply")) |_| {
+                try outputFile.writer().writeAll("};\n");
+            }
         }
     }
 

@@ -170,6 +170,11 @@ pub fn build(b: *std.Build) !void {
                 _ = moduleSource.addCopyFile(.{
                     .generated = &(ProtoGen.create(b, xcbprotoSource.path(try std.fs.path.join(b.allocator, &.{ "src", entry.name })))).output,
                 }, try std.fs.path.join(b.allocator, &.{ "xcb", "proto", b.fmt("{s}.zig", .{entry.name[0..(entry.name.len - 4)]}) }));
+
+                try protosImport.writer().print(
+                    \\pub const {s} = @import("proto/{s}.zig");
+                    \\
+                , .{ entry.name[0..(entry.name.len - 4)], entry.name[0..(entry.name.len - 4)] });
             }
 
             _ = moduleSource.add("xcb/protos.zig", protosImport.items);
