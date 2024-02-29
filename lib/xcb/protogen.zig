@@ -111,6 +111,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     }
 
     try outputFile.writer().writeAll(
+        \\const std = @import("std");
         \\const connection = @import("../conn.zig");
         \\const Connection = connection.Connection;
         \\const Self = @This();
@@ -253,7 +254,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
                 }
             }
 
-            try outputFile.writer().print("\n}};\nextern fn xcb{s}(*Connection", .{snakeName});
+            try outputFile.writer().print("\nextern fn xcb{s}(*Connection", .{snakeName});
 
             var fieldIter = el.findChildrenByTag("field");
             while (fieldIter.next()) |fieldEl| {
