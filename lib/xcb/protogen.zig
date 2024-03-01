@@ -309,7 +309,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
             const fieldName = el.getAttribute("name") orelse return error.AttributeNotFound;
 
             try outputFile.writer().print(
-                \\      const {s} = Self.CARD32;
+                \\      pub const {s} = Self.CARD32;
                 \\
             , .{fieldName});
         }
@@ -322,7 +322,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
             const newName = el.getAttribute("newname") orelse return error.AttributeNotFound;
 
             try outputFile.writer().print(
-                \\      const {s} = Self.{s};
+                \\      pub const {s} = Self.{s};
                 \\
             , .{ newName, oldName });
         }
