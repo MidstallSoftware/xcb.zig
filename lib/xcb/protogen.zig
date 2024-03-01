@@ -363,12 +363,12 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
                 \\  rem: c_int,
                 \\  index: c_int,
                 \\
-                \\  extern fn xcb{s}_{s}_next(*Iterator) void;
+                \\  extern fn xcb{s}{s}_next(*Iterator) void;
                 \\
                 \\  pub fn next(self: *Iterator) ?*const Self.{s} {{
                 \\      if (self.rem == 0) return null;
                 \\      const value = self.data;
-                \\      xcb{s}_{s}_next(self);
+                \\      xcb{s}{s}_next(self);
                 \\      return value;
                 \\  }}
                 \\}};
