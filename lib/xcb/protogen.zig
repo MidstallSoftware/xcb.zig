@@ -118,7 +118,8 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName
 
             try writer.print(
                 \\ {{
-                \\  return xcb{s}_{s}(self)[0..xcb{s}_{s}_length(self)];
+                \\  const len: usize = @intCast(xcb{s}_{s}_length(self));
+                \\  return xcb{s}_{s}(self)[0..len];
                 \\}}
                 \\
             , .{
