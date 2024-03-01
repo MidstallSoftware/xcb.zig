@@ -138,7 +138,7 @@ fn genRequest(self: *Self, el: *xml.Element, writer: anytype) !void {
             \\
             \\  extern fn xcb{s}_reply(*Connection, {s}Cookie, *?*connection.GenericError) ?*{s}Reply;
             \\  pub inline fn reply(self: {s}Cookie, conn: *Connection) !*{s}Reply {{
-            \\      var err: ?*conn.GenericError = null;
+            \\      var err: ?*connection.GenericError = null;
             \\      const ret = xcb{s}_reply(conn, self, &err);
             \\      if (err == null) {{
             \\          std.debug.assert(ret == null);
