@@ -317,6 +317,18 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     , .{name[0..(name.len - 4)]});
 
     {
+        var iter = doc.root.findChildrenByTag("xidtype");
+        while (iter.next()) |el| {
+            const fieldName = el.getAttribute("name") orelse return error.AttributeNotFound;
+
+            try outputFile.writer().print(
+                \\      const {s} = Self.CARD32;
+                \\
+            , .{fieldName});
+        }
+    }
+
+    {
         var iter = doc.root.findChildrenByTag("typedef");
         while (iter.next()) |el| {
             const oldName = el.getAttribute("oldname") orelse return error.AttributeNotFound;
