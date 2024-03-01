@@ -17,6 +17,10 @@ fn makeSnakeCase(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
     var output = std.ArrayList(u8).init(alloc);
     errdefer output.deinit();
 
+    if (upper == input.len) {
+        try output.append('_');
+    }
+
     for (input) |ch| {
         if (std.ascii.isUpper(ch) and upper != input.len) {
             try output.append('_');
