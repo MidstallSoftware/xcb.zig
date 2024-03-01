@@ -40,7 +40,7 @@ pub fn create(b: *std.Build, source: std.Build.LazyPath) *Self {
     return self;
 }
 
-fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName: []const u8, writer: anytype) !void {
+fn genStructFields(self: *Self, funcPrefix: []const u8, el: *xml.Element, elName: []const u8, structName: []const u8, writer: anytype) !void {
     const b = self.step.owner;
     const arena = b.allocator;
 
@@ -84,7 +84,8 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName
             const snakeName = try makeSnakeCase(arena, fieldName);
             defer arena.free(snakeName);
 
-            try writer.print("\nextern fn xcb{s}_{s}_iterator(*const {s}) ", .{
+            try writer.print("\nextern fn xcb{s}{s}_{s}_iterator(*const {s}) ", .{
+                funcPrefix,
                 elNameSnakeName,
                 snakeName,
                 structName,
@@ -98,21 +99,24 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName
 
             try writer.print(
                 \\.Iterator;
-                \\pub const @"{c}{s}_iterator" = xcb{s}_{s}_iterator;
+                \\pub const @"{c}{s}_iterator" = xcb{s}{s}_{s}_iterator;
                 \\
-                \\extern fn xcb{s}_{s}_length(*const {s}) c_int;
-                \\pub const @"{c}{s}_length" = xcb{s}_{s}_length;
+                \\extern fn xcb{s}{s}_{s}_length(*const {s}) c_int;
+                \\pub const @"{c}{s}_length" = xcb{s}{s}_{s}_length;
                 \\
             , .{
                 std.ascii.toLower(fieldName[0]),
                 fieldName[1..],
+                funcPrefix,
                 elNameSnakeName,
                 snakeName,
+                funcPrefix,
                 elNameSnakeName,
                 snakeName,
                 structName,
                 std.ascii.toLower(fieldName[0]),
                 fieldName[1..],
+                funcPrefix,
                 elNameSnakeName,
                 snakeName,
             });
@@ -120,7 +124,7 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName
     }
 }
 
-fn genRequest(self: *Self, el: *xml.Element, writer: anytype) !void {
+fn genRequest(self: *Self, funcPrefix: []const u8, el: *xml.Element, writer: anytype) !void {
     const b = self.step.owner;
     const arena = b.allocator;
 
@@ -136,11 +140,11 @@ fn genRequest(self: *Self, el: *xml.Element, writer: anytype) !void {
             \\pub const {s}Cookie = extern struct {{
             \\  seq: c_uint,
             \\
-            \\  extern fn xcb{s}_reply(*Connection, {s}Cookie, *?*connection.GenericError) ?*{s}Reply;
+            \\  extern fn xcb{s}{s}_reply(*Connection, {s}Cookie, *?*connection.GenericError) ?*{s}Reply;
             \\  pub inline fn reply(self: {s}Cookie, conn: *Connection) !*{s}Reply {{
             \\      var err: ?*connection.GenericError = null;
-            \\      const ret = xcb{s}_reply(conn, self, &err);
-            \\      if (err == null) {{
+            \\      const ret = xcb{s}{s}_reply(conn, self, &err);
+            \\      if (err != null) {{
             \\          std.debug.assert(ret == null);
             \\          return error.GenericError;
             \\      }}
@@ -158,20 +162,21 @@ fn genRequest(self: *Self, el: *xml.Element, writer: anytype) !void {
             \\
         , .{
             elName,
+            funcPrefix,
             snakeName,
             elName,
             elName,
             elName,
             elName,
+            funcPrefix,
             snakeName,
             elName,
         });
 
-        try self.genStructFields(elReply, elName, b.fmt("{s}Reply", .{elName}), writer);
+        try self.genStructFields(funcPrefix, elReply, elName, b.fmt("{s}Reply", .{elName}), writer);
     }
 
-    // FIXME: move out of the if statement once elName doesn't corrupt
-    try writer.print("\nextern fn xcb{s}(*Connection", .{snakeName});
+    try writer.print("\nextern fn xcb{s}{s}(*Connection", .{ funcPrefix, snakeName });
 
     var fieldIter = el.findChildrenByTag("field");
     while (fieldIter.next()) |fieldEl| {
@@ -189,7 +194,7 @@ fn genRequest(self: *Self, el: *xml.Element, writer: anytype) !void {
         try writer.writeAll(") connection.VoidCookie;");
     }
 
-    try writer.print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
+    try writer.print("\npub const @\"{c}{s}\" = xcb{s}{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], funcPrefix, snakeName });
 
     if (el.findChildByTag("reply")) |_| {
         try writer.writeAll("};\n");
@@ -263,6 +268,8 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
             doc.root.tag,
         });
     }
+
+    const funcPrefix = if (doc.root.getAttribute("extension-name")) |n| b.fmt("_{s}", .{try std.ascii.allocLowerString(b.allocator, n)}) else "";
 
     try outputFile.writer().writeAll(
         \\const std = @import("std");
@@ -339,7 +346,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
 
             try outputFile.writer().print("\npub const {s} = extern struct {{\n", .{elName});
 
-            try self.genStructFields(el, elName, elName, outputFile.writer());
+            try self.genStructFields(funcPrefix, el, elName, elName, outputFile.writer());
 
             try outputFile.writer().print(
                 \\pub const Iterator = extern struct {{
@@ -347,12 +354,12 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
                 \\  rem: c_int,
                 \\  index: c_int,
                 \\
-                \\  extern fn xcb_{s}_next(*Iterator) void;
+                \\  extern fn xcb{s}_{s}_next(*Iterator) void;
                 \\
                 \\  pub fn next(self: *Iterator) ?*const Self.{s} {{
                 \\      if (self.rem == 0) return null;
                 \\      const value = self.data;
-                \\      xcb_{s}_next(self);
+                \\      xcb{s}_{s}_next(self);
                 \\      return value;
                 \\  }}
                 \\}};
@@ -360,8 +367,10 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
                 \\
             , .{
                 elName,
+                funcPrefix,
                 elNameSnakeName,
                 elName,
+                funcPrefix,
                 elNameSnakeName,
             });
         }
@@ -370,7 +379,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     {
         var iter = doc.root.findChildrenByTag("request");
         while (iter.next()) |el| {
-            try self.genRequest(el, outputFile.writer());
+            try self.genRequest(funcPrefix, el, outputFile.writer());
         }
     }
 

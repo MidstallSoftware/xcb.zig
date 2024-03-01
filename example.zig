@@ -9,7 +9,10 @@ pub fn main() !void {
     std.debug.print("{}\n", .{setup});
 
     var iter = setup.roots_iterator();
-    while (iter.next()) |screen| std.debug.print("{}\n", .{screen});
+    while (iter.next()) |screen| {
+        const screenCount = try xcb.xinerama.GetScreenCountReply.getScreenCount(conn, screen.root).reply(conn);
+        std.debug.print("{}\n", .{screenCount});
+    }
 
     while (conn.waitForEvent() catch null) |ev| {
         std.debug.print("{}\n", .{ev});

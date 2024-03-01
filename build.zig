@@ -254,6 +254,7 @@ pub fn build(b: *std.Build) !void {
             "bigreq.c",
             "xc_misc.c",
             "xproto.c",
+            "xinerama.c",
         },
         .flags = &.{
             "-DXCB_QUEUE_BUFFER_SIZE=16384",
