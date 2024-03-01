@@ -40,6 +40,172 @@ pub fn create(b: *std.Build, source: std.Build.LazyPath) *Self {
     return self;
 }
 
+fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, writer: anytype) !void {
+    const b = self.step.owner;
+    const arena = b.allocator;
+
+    const elNameSnakeName = try makeSnakeCase(arena, elName);
+    defer arena.free(elName);
+
+    for (el.children, 0..) |child, i| {
+        if (child != .element) continue;
+        const childElem = child.element;
+
+        if (std.mem.eql(u8, childElem.tag, "pad")) {
+            const bytes = try std.fmt.parseInt(usize, childElem.getAttribute("bytes") orelse continue, 10);
+            if (bytes == 1 and i == 0) continue;
+
+            try writer.print("         pad{}: [{}]u8,\n", .{ i, bytes });
+        } else if (std.mem.eql(u8, childElem.tag, "field")) {
+            const fieldName = childElem.getAttribute("name") orelse return error.AttributeNotFound;
+            const fieldType = childElem.getAttribute("type") orelse return error.AttributeNotFound;
+
+            try writer.print("         {s}: ", .{std.zig.fmtId(fieldName)});
+
+            if (std.mem.indexOf(u8, fieldType, ":")) |x| {
+                try writer.print("{s}.{s},\n", .{ fieldType[0..x], fieldType[(x + 1)..] });
+            } else {
+                try writer.print("Self.{s},\n", .{fieldType});
+            }
+        }
+    }
+
+    for (el.children) |child| {
+        if (child != .element) continue;
+        const childElem = child.element;
+
+        if (std.mem.eql(u8, childElem.tag, "list")) {
+            const fieldName = try arena.dupe(u8, childElem.getAttribute("name") orelse return error.AttributeNotFound);
+            defer arena.free(fieldName);
+
+            const fieldType = try arena.dupe(u8, childElem.getAttribute("type") orelse return error.AttributeNotFound);
+            defer arena.free(fieldType);
+
+            const snakeName = try makeSnakeCase(arena, fieldName);
+            defer arena.free(snakeName);
+
+            try writer.print("\nextern fn xcb{s}_{s}(*const {s}) [*]", .{
+                elNameSnakeName,
+                snakeName,
+                elName,
+            });
+
+            if (std.mem.indexOf(u8, fieldType, ":")) |x| {
+                try writer.print("{s}.{s}", .{ fieldType[0..x], fieldType[(x + 1)..] });
+            } else {
+                try writer.print("Self.{s}", .{fieldType});
+            }
+
+            try writer.print(
+                \\;
+                \\extern fn xcb{s}_{s}_length(*const {s}) c_int;
+                \\
+                \\pub fn @"{c}{s}"(self: *const {s}) []
+            , .{
+                elNameSnakeName,
+                snakeName,
+                elName,
+                std.ascii.toLower(fieldName[0]),
+                fieldName[1..],
+                elName,
+            });
+
+            if (std.mem.indexOf(u8, fieldType, ":")) |x| {
+                try writer.print("{s}.{s}", .{ fieldType[0..x], fieldType[(x + 1)..] });
+            } else {
+                try writer.print("Self.{s}", .{fieldType});
+            }
+
+            try writer.print(
+                \\ {{
+                \\  return xcb{s}_{s}(self)[0..xcb_{s}_{s}_length(self)];
+                \\}}
+                \\
+            , .{
+                elNameSnakeName,
+                snakeName,
+                elNameSnakeName,
+                snakeName,
+            });
+        }
+    }
+}
+
+fn genRequest(self: *Self, el: *xml.Element, writer: anytype) !void {
+    const b = self.step.owner;
+    const arena = b.allocator;
+
+    const elName = try arena.dupe(u8, el.getAttribute("name") orelse return error.AttributeNotFound);
+    defer arena.free(elName);
+
+    const snakeName = try makeSnakeCase(b.allocator, elName);
+    defer b.allocator.free(snakeName);
+
+    if (el.findChildByTag("reply")) |elReply| {
+        try writer.print(
+            \\
+            \\pub const {s}Cookie = extern struct {{
+            \\  seq: c_uint,
+            \\
+            \\  extern fn xcb{s}_reply(*Connection, {s}Cookie, *?*connection.GenericError) ?*{s}Reply;
+            \\  pub inline fn reply(self: {s}Cookie, conn: *Connection) !*{s}Reply {{
+            \\      var err: ?*conn.GenericError = null;
+            \\      const ret = xcb{s}_reply(conn, self, &err);
+            \\      if (err == null) {{
+            \\          std.debug.assert(ret == null);
+            \\          return error.GenericError;
+            \\      }}
+            \\
+            \\      std.debug.assert(ret != null);
+            \\      return ret.?;
+            \\  }}
+            \\}};
+            \\
+            \\pub const {s}Reply = extern struct {{
+            \\  response_type: u8,
+            \\  pad0: u8,
+            \\  seq: u16,
+            \\  len: u32,
+            \\
+        , .{
+            elName,
+            snakeName,
+            elName,
+            elName,
+            elName,
+            elName,
+            snakeName,
+            elName,
+        });
+
+        try self.genStructFields(elReply, elName, writer);
+    }
+
+    try writer.print("\nextern fn xcb{s}(*Connection", .{snakeName});
+
+    var fieldIter = el.findChildrenByTag("field");
+    while (fieldIter.next()) |fieldEl| {
+        const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
+        if (std.mem.indexOf(u8, fieldType, ":")) |i| {
+            try writer.print(", {s}.{s}", .{ fieldType[0..i], fieldType[(i + 1)..] });
+        } else {
+            try writer.print(", Self.{s}", .{fieldType});
+        }
+    }
+
+    if (el.findChildByTag("reply")) |_| {
+        try writer.print(") {s}Cookie;", .{elName});
+    } else {
+        try writer.writeAll(") connection.VoidCookie;");
+    }
+
+    try writer.print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
+
+    if (el.findChildByTag("reply")) |_| {
+        try writer.writeAll("};\n");
+    }
+}
+
 fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     const b = step.owner;
     const self = @fieldParentPtr(Self, "step", step);
@@ -102,8 +268,6 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     var outputFile = try cache_dir.createFile(name, .{});
     defer outputFile.close();
 
-    errdefer std.debug.print("{s}/{s}\n", .{ cache_path, name });
-
     if (!std.mem.eql(u8, doc.root.tag, "xcb")) {
         return step.fail("not an xcb protocol, root tag is {s}, expected xcb", .{
             doc.root.tag,
@@ -145,7 +309,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
 
     try outputFile.writer().print(
         \\
-        \\  const {s} = struct {{
+        \\const {s} = struct {{
         \\
     , .{name[0..(name.len - 4)]});
 
@@ -166,22 +330,9 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
         var iter = doc.root.findChildrenByTag("struct");
         while (iter.next()) |el| {
             const elName = el.getAttribute("name") orelse return error.AttributeNotFound;
+
             try outputFile.writer().print("\npub const {s} = extern struct {{\n", .{elName});
-
-            var fieldIter = el.findChildrenByTag("field");
-            while (fieldIter.next()) |fieldEl| {
-                const fieldName = fieldEl.getAttribute("name") orelse return error.AttributeNotFound;
-                const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
-
-                try outputFile.writer().print("         {s}: ", .{fieldName});
-
-                if (std.mem.indexOf(u8, fieldType, ":")) |i| {
-                    try outputFile.writer().print("{s}.{s},\n", .{ fieldType[0..i], fieldType[(i + 1)..] });
-                } else {
-                    try outputFile.writer().print("Self.{s},\n", .{fieldType});
-                }
-            }
-
+            try self.genStructFields(el, elName, outputFile.writer());
             try outputFile.writer().writeAll("};\n");
         }
     }
@@ -189,94 +340,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     {
         var iter = doc.root.findChildrenByTag("request");
         while (iter.next()) |el| {
-            const elName = el.getAttribute("name") orelse return error.AttributeNotFound;
-            const snakeName = try makeSnakeCase(b.allocator, elName);
-            defer b.allocator.free(snakeName);
-
-            if (el.findChildByTag("reply")) |elReply| {
-                try outputFile.writer().print(
-                    \\
-                    \\pub const {s}Cookie = extern struct {{
-                    \\  seq: c_uint,
-                    \\
-                    \\  extern fn xcb{s}_reply(*Connection, {s}Cookie, *?*connection.GenericError) ?*{s}Reply;
-                    \\  pub inline fn reply(self: {s}Cookie, conn: *Connection) !*{s}Reply {{
-                    \\      var err: ?*conn.GenericError = null;
-                    \\      const ret = xcb{s}_reply(conn, self, &err);
-                    \\      if (err == null) {{
-                    \\          std.debug.assert(ret == null);
-                    \\          return error.GenericError;
-                    \\      }}
-                    \\
-                    \\      std.debug.assert(ret != null);
-                    \\      return ret.?;
-                    \\  }}
-                    \\}};
-                    \\
-                    \\pub const {s}Reply = extern struct {{
-                    \\  response_type: u8,
-                    \\  pad0: u8,
-                    \\  seq: u16,
-                    \\  len: u32,
-                    \\
-                , .{
-                    elName,
-                    snakeName,
-                    elName,
-                    elName,
-                    elName,
-                    elName,
-                    snakeName,
-                    elName,
-                });
-
-                for (elReply.children, 0..) |elReplyChild, i| {
-                    if (elReplyChild != .element) continue;
-
-                    const elReplyChildEl = elReplyChild.element;
-                    if (std.mem.eql(u8, elReplyChildEl.tag, "pad")) {
-                        const bytes = try std.fmt.parseInt(usize, elReplyChildEl.getAttribute("bytes") orelse continue, 10);
-                        if (bytes == 1 and i == 0) continue;
-
-                        try outputFile.writer().print("pad{}: [{}]u8,\n", .{ i, bytes });
-                    } else if (std.mem.eql(u8, elReplyChildEl.tag, "field")) {
-                        const fieldName = elReplyChildEl.getAttribute("name") orelse return error.AttributeNotFound;
-                        const fieldType = elReplyChildEl.getAttribute("type") orelse return error.AttributeNotFound;
-
-                        try outputFile.writer().print("         @\"{s}\": ", .{fieldName});
-
-                        if (std.mem.indexOf(u8, fieldType, ":")) |x| {
-                            try outputFile.writer().print("{s}.{s},\n", .{ fieldType[0..x], fieldType[(x + 1)..] });
-                        } else {
-                            try outputFile.writer().print("Self.{s},\n", .{fieldType});
-                        }
-                    }
-                }
-            }
-
-            try outputFile.writer().print("\nextern fn xcb{s}(*Connection", .{snakeName});
-
-            var fieldIter = el.findChildrenByTag("field");
-            while (fieldIter.next()) |fieldEl| {
-                const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
-                if (std.mem.indexOf(u8, fieldType, ":")) |i| {
-                    try outputFile.writer().print(", {s}.{s}", .{ fieldType[0..i], fieldType[(i + 1)..] });
-                } else {
-                    try outputFile.writer().print(", Self.{s}", .{fieldType});
-                }
-            }
-
-            if (el.findChildByTag("reply")) |_| {
-                try outputFile.writer().print(") {s}Cookie;", .{elName});
-            } else {
-                try outputFile.writer().writeAll(") connection.VoidCookie;");
-            }
-
-            try outputFile.writer().print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
-
-            if (el.findChildByTag("reply")) |_| {
-                try outputFile.writer().writeAll("};\n");
-            }
+            try self.genRequest(el, outputFile.writer());
         }
     }
 
