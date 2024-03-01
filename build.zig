@@ -90,6 +90,7 @@ pub fn build(b: *std.Build) !void {
 
     const headers = b.addWriteFiles();
     const moduleSource = b.addWriteFiles();
+    var protoCSources = std.ArrayList([]const u8).init(b.allocator);
 
     const xcbprotoPath = blk: {
         var man = b.graph.cache.obtain();
@@ -149,6 +150,10 @@ pub fn build(b: *std.Build) !void {
                     \\pub const {s} = @import("proto/{s}.zig");
                     \\
                 , .{ entry.name[0..(entry.name.len - 4)], entry.name[0..(entry.name.len - 4)] });
+
+                try protoCSources.append(b.fmt("{s}.c", .{
+                    entry.name[0..(entry.name.len - 4)],
+                }));
             }
 
             try man.writeManifest();
@@ -177,6 +182,10 @@ pub fn build(b: *std.Build) !void {
                     \\pub const {s} = @import("proto/{s}.zig");
                     \\
                 , .{ entry.name[0..(entry.name.len - 4)], entry.name[0..(entry.name.len - 4)] });
+
+                try protoCSources.append(b.fmt("{s}.c", .{
+                    entry.name[0..(entry.name.len - 4)],
+                }));
             }
 
             _ = moduleSource.add("xcb/protos.zig", protosImport.items);
@@ -250,12 +259,7 @@ pub fn build(b: *std.Build) !void {
 
     libxcb.addCSourceFiles(.{
         .root = .{ .path = xcbprotoPath },
-        .files = &.{
-            "bigreq.c",
-            "xc_misc.c",
-            "xproto.c",
-            "xinerama.c",
-        },
+        .files = protoCSources.items,
         .flags = &.{
             "-DXCB_QUEUE_BUFFER_SIZE=16384",
             "-DIOV_MAX=16",
