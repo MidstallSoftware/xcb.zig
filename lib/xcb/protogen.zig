@@ -40,7 +40,7 @@ pub fn create(b: *std.Build, source: std.Build.LazyPath) *Self {
     return self;
 }
 
-fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, writer: anytype) !void {
+fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName: []const u8, writer: anytype) !void {
     const b = self.step.owner;
     const arena = b.allocator;
 
@@ -87,7 +87,7 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, writer: an
             try writer.print("\nextern fn xcb{s}_{s}(*const {s}) [*]", .{
                 elNameSnakeName,
                 snakeName,
-                elName,
+                structName,
             });
 
             if (std.mem.indexOf(u8, fieldType, ":")) |x| {
@@ -104,10 +104,10 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, writer: an
             , .{
                 elNameSnakeName,
                 snakeName,
-                elName,
+                structName,
                 std.ascii.toLower(fieldName[0]),
                 fieldName[1..],
-                elName,
+                structName,
             });
 
             if (std.mem.indexOf(u8, fieldType, ":")) |x| {
@@ -118,7 +118,7 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, writer: an
 
             try writer.print(
                 \\ {{
-                \\  return xcb{s}_{s}(self)[0..xcb_{s}_{s}_length(self)];
+                \\  return xcb{s}_{s}(self)[0..xcb{s}_{s}_length(self)];
                 \\}}
                 \\
             , .{
@@ -178,28 +178,31 @@ fn genRequest(self: *Self, el: *xml.Element, writer: anytype) !void {
             elName,
         });
 
-        try self.genStructFields(elReply, elName, writer);
-    }
+        try self.genStructFields(elReply, elName, b.fmt("{s}Reply", .{elName}), writer);
+    } else {
+        // FIXME: move out of the if statement once elName doesn't corrupt
+        try writer.print("\nextern fn xcb{s}(*Connection", .{snakeName});
 
-    try writer.print("\nextern fn xcb{s}(*Connection", .{snakeName});
-
-    var fieldIter = el.findChildrenByTag("field");
-    while (fieldIter.next()) |fieldEl| {
-        const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
-        if (std.mem.indexOf(u8, fieldType, ":")) |i| {
-            try writer.print(", {s}.{s}", .{ fieldType[0..i], fieldType[(i + 1)..] });
-        } else {
-            try writer.print(", Self.{s}", .{fieldType});
+        var fieldIter = el.findChildrenByTag("field");
+        while (fieldIter.next()) |fieldEl| {
+            const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
+            if (std.mem.indexOf(u8, fieldType, ":")) |i| {
+                try writer.print(", {s}.{s}", .{ fieldType[0..i], fieldType[(i + 1)..] });
+            } else {
+                try writer.print(", Self.{s}", .{fieldType});
+            }
         }
+
+        try writer.writeAll(") connection.VoidCookie;");
+
+        // FIXME: move out of the if statement once elName doesn't corrupt
+        try writer.print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
     }
 
     if (el.findChildByTag("reply")) |_| {
-        try writer.print(") {s}Cookie;", .{elName});
-    } else {
-        try writer.writeAll(") connection.VoidCookie;");
+        // FIXME: remove comment once elName doesn't corrupt
+        //try writer.print(") {s}Cookie;", .{elName});
     }
-
-    try writer.print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
 
     if (el.findChildByTag("reply")) |_| {
         try writer.writeAll("};\n");
@@ -332,7 +335,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
             const elName = el.getAttribute("name") orelse return error.AttributeNotFound;
 
             try outputFile.writer().print("\npub const {s} = extern struct {{\n", .{elName});
-            try self.genStructFields(el, elName, outputFile.writer());
+            try self.genStructFields(el, elName, elName, outputFile.writer());
             try outputFile.writer().writeAll("};\n");
         }
     }
