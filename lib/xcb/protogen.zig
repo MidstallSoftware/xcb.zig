@@ -7,12 +7,21 @@ source: std.Build.LazyPath,
 output: std.Build.GeneratedFile,
 
 fn makeSnakeCase(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
+    var upper: usize = 0;
+    for (input) |ch| {
+        if (std.ascii.isUpper(ch)) {
+            upper += 1;
+        }
+    }
+
     var output = std.ArrayList(u8).init(alloc);
     errdefer output.deinit();
 
     for (input) |ch| {
-        if (std.ascii.isUpper(ch)) {
+        if (std.ascii.isUpper(ch) and upper != input.len) {
             try output.append('_');
+            try output.append(std.ascii.toLower(ch));
+        } else if (std.ascii.isUpper(ch) and upper == input.len) {
             try output.append(std.ascii.toLower(ch));
         } else {
             try output.append(ch);
@@ -341,7 +350,7 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
             const elName = try b.allocator.dupe(u8, el.getAttribute("name") orelse return error.AttributeNotFound);
             defer b.allocator.free(elName);
 
-            const elNameSnakeName = try makeSnakeCase(b.allocator, try std.ascii.allocLowerString(b.allocator, elName));
+            const elNameSnakeName = try makeSnakeCase(b.allocator, elName);
             defer b.allocator.free(elNameSnakeName);
 
             try outputFile.writer().print("\npub const {s} = extern struct {{\n", .{elName});
