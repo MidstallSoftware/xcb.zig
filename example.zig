@@ -8,6 +8,9 @@ pub fn main() !void {
     const setup = conn.getSetup();
     std.debug.print("{}\n", .{setup});
 
+    var iter = setup.roots_iterator();
+    while (iter.next()) |screen| std.debug.print("{}\n", .{screen});
+
     while (conn.waitForEvent() catch null) |ev| {
         std.debug.print("{}\n", .{ev});
     }

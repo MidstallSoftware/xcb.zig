@@ -45,7 +45,7 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName
     const arena = b.allocator;
 
     const elNameSnakeName = try makeSnakeCase(arena, elName);
-    defer arena.free(elName);
+    defer arena.free(elNameSnakeName);
 
     for (el.children, 0..) |child, i| {
         if (child != .element) continue;
@@ -84,7 +84,7 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName
             const snakeName = try makeSnakeCase(arena, fieldName);
             defer arena.free(snakeName);
 
-            try writer.print("\nextern fn xcb{s}_{s}(*const {s}) [*]", .{
+            try writer.print("\nextern fn xcb{s}_{s}_iterator(*const {s}) ", .{
                 elNameSnakeName,
                 snakeName,
                 structName,
@@ -97,34 +97,22 @@ fn genStructFields(self: *Self, el: *xml.Element, elName: []const u8, structName
             }
 
             try writer.print(
-                \\;
-                \\extern fn xcb{s}_{s}_length(*const {s}) c_int;
+                \\.Iterator;
+                \\pub const @"{c}{s}_iterator" = xcb{s}_{s}_iterator;
                 \\
-                \\pub fn @"{c}{s}"(self: *const {s}) []
+                \\extern fn xcb{s}_{s}_length(*const {s}) c_int;
+                \\pub const @"{c}{s}_length" = xcb{s}_{s}_length;
+                \\
             , .{
+                std.ascii.toLower(fieldName[0]),
+                fieldName[1..],
+                elNameSnakeName,
+                snakeName,
                 elNameSnakeName,
                 snakeName,
                 structName,
                 std.ascii.toLower(fieldName[0]),
                 fieldName[1..],
-                structName,
-            });
-
-            if (std.mem.indexOf(u8, fieldType, ":")) |x| {
-                try writer.print("{s}.{s}", .{ fieldType[0..x], fieldType[(x + 1)..] });
-            } else {
-                try writer.print("Self.{s}", .{fieldType});
-            }
-
-            try writer.print(
-                \\ {{
-                \\  const len: usize = @intCast(xcb{s}_{s}_length(self));
-                \\  return xcb{s}_{s}(self)[0..len];
-                \\}}
-                \\
-            , .{
-                elNameSnakeName,
-                snakeName,
                 elNameSnakeName,
                 snakeName,
             });
@@ -180,30 +168,28 @@ fn genRequest(self: *Self, el: *xml.Element, writer: anytype) !void {
         });
 
         try self.genStructFields(elReply, elName, b.fmt("{s}Reply", .{elName}), writer);
-    } else {
-        // FIXME: move out of the if statement once elName doesn't corrupt
-        try writer.print("\nextern fn xcb{s}(*Connection", .{snakeName});
+    }
 
-        var fieldIter = el.findChildrenByTag("field");
-        while (fieldIter.next()) |fieldEl| {
-            const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
-            if (std.mem.indexOf(u8, fieldType, ":")) |i| {
-                try writer.print(", {s}.{s}", .{ fieldType[0..i], fieldType[(i + 1)..] });
-            } else {
-                try writer.print(", Self.{s}", .{fieldType});
-            }
+    // FIXME: move out of the if statement once elName doesn't corrupt
+    try writer.print("\nextern fn xcb{s}(*Connection", .{snakeName});
+
+    var fieldIter = el.findChildrenByTag("field");
+    while (fieldIter.next()) |fieldEl| {
+        const fieldType = fieldEl.getAttribute("type") orelse return error.AttributeNotFound;
+        if (std.mem.indexOf(u8, fieldType, ":")) |i| {
+            try writer.print(", {s}.{s}", .{ fieldType[0..i], fieldType[(i + 1)..] });
+        } else {
+            try writer.print(", Self.{s}", .{fieldType});
         }
-
-        try writer.writeAll(") connection.VoidCookie;");
-
-        // FIXME: move out of the if statement once elName doesn't corrupt
-        try writer.print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
     }
 
     if (el.findChildByTag("reply")) |_| {
-        // FIXME: remove comment once elName doesn't corrupt
-        //try writer.print(") {s}Cookie;", .{elName});
+        try writer.print(") {s}Cookie;", .{elName});
+    } else {
+        try writer.writeAll(") connection.VoidCookie;");
     }
+
+    try writer.print("\npub const @\"{c}{s}\" = xcb{s};\n", .{ std.ascii.toLower(elName[0]), elName[1..], snakeName });
 
     if (el.findChildByTag("reply")) |_| {
         try writer.writeAll("};\n");
@@ -345,11 +331,39 @@ fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
     {
         var iter = doc.root.findChildrenByTag("struct");
         while (iter.next()) |el| {
-            const elName = el.getAttribute("name") orelse return error.AttributeNotFound;
+            const elName = try b.allocator.dupe(u8, el.getAttribute("name") orelse return error.AttributeNotFound);
+            defer b.allocator.free(elName);
+
+            const elNameSnakeName = try makeSnakeCase(b.allocator, try std.ascii.allocLowerString(b.allocator, elName));
+            defer b.allocator.free(elNameSnakeName);
 
             try outputFile.writer().print("\npub const {s} = extern struct {{\n", .{elName});
+
             try self.genStructFields(el, elName, elName, outputFile.writer());
-            try outputFile.writer().writeAll("};\n");
+
+            try outputFile.writer().print(
+                \\pub const Iterator = extern struct {{
+                \\  data: *const Self.{s},
+                \\  rem: c_int,
+                \\  index: c_int,
+                \\
+                \\  extern fn xcb_{s}_next(*Iterator) void;
+                \\
+                \\  pub fn next(self: *Iterator) ?*const Self.{s} {{
+                \\      if (self.rem == 0) return null;
+                \\      const value = self.data;
+                \\      xcb_{s}_next(self);
+                \\      return value;
+                \\  }}
+                \\}};
+                \\}};
+                \\
+            , .{
+                elName,
+                elNameSnakeName,
+                elName,
+                elNameSnakeName,
+            });
         }
     }
 
