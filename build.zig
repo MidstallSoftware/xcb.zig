@@ -282,7 +282,7 @@ pub fn build(b: *std.Build) !void {
 
     libxcbShm.addCSourceFiles(.{
         .root = .{ .path = xcbprotoPath },
-        .files = &.{"shm.c"},
+        .files = &.{ "shm.c", "xinerama.c" },
     });
 
     libxcbShm.linkLibrary(libxcb);
