@@ -56,37 +56,3 @@ pub fn parse(self: *Protocol, parser: *xml.Parser, kindStr: []const u8) Protocol
         .ref = ref,
     });
 }
-
-pub fn format(self: *const Copy, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    const width = (options.width orelse 0) + 2;
-
-    try writer.writeAll(@typeName(Copy) ++ "{\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".kind = .");
-    try std.zig.fmtId(@tagName(self.kind)).format(fmt, options, writer);
-    try writer.writeAll(",\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".name = \"");
-    try writer.writeAll(self.name);
-    try writer.writeAll("\",\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".number = ");
-    try std.fmt.formatInt(self.number, 10, .lower, .{
-        .width = 0,
-        .fill = options.fill,
-        .precision = options.precision,
-        .alignment = options.alignment,
-    }, writer);
-    try writer.writeAll(",\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".ref = \"");
-    try writer.writeAll(self.ref);
-    try writer.writeAll("\",\n");
-
-    try writer.writeByteNTimes(' ', width - 2);
-    try writer.writeByte('}');
-}

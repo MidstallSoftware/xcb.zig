@@ -8,9 +8,9 @@ pub fn main() !void {
     const setup = conn.getSetup();
     std.debug.print("{}\n", .{setup});
 
-    var iter = setup.roots_iterator();
+    var iter = setup.rootsIterator();
     while (iter.next()) |screen| {
-        const screenCount = try xcb.xinerama.GetScreenCountReply.getScreenCount(conn, screen.root).reply(conn);
+        const screenCount = try xcb.xinerama.getScreenCount(@ptrCast(@alignCast(conn)), screen.root).reply(@ptrCast(@alignCast(conn)));
         std.debug.print("{}\n", .{screenCount});
     }
 

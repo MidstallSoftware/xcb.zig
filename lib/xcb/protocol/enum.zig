@@ -7,30 +7,6 @@ const Enum = @This();
 pub const Item = struct {
     index: usize,
     bit: bool,
-
-    pub fn format(self: *const Item, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        const width = (options.width orelse 0) + 2;
-
-        try writer.writeAll(@typeName(Enum) ++ "{\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".index = ");
-        try std.fmt.formatInt(self.index, 10, .lower, .{
-            .alignment = options.alignment,
-            .width = 0,
-            .fill = options.fill,
-            .precision = options.precision,
-        }, writer);
-        try writer.writeAll(",\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".bit = ");
-        try writer.writeAll(if (self.bit) "true" else "false");
-        try writer.writeAll(",\n");
-
-        try writer.writeByteNTimes(' ', width - 2);
-        try writer.writeByte('}');
-    }
 };
 
 name: []const u8,
@@ -92,44 +68,4 @@ fn parseItem(self: *Protocol, parser: *xml.Parser, e: *Enum) Protocol.ParseError
         .index = value.?,
         .bit = isBit,
     });
-}
-
-pub fn format(self: *const Enum, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    const width = (options.width orelse 0) + 2;
-
-    try writer.writeAll(@typeName(Enum) ++ "{\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".name = \"");
-    try writer.writeAll(self.name);
-    try writer.writeAll("\",\n");
-
-    if (self.items.count() > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".items = .{\n");
-
-        var iter = self.items.iterator();
-        while (iter.next()) |item| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try writer.writeByte('.');
-            try writer.writeAll(item.key_ptr.*);
-            try writer.writeAll(" = ");
-            try item.value_ptr.*.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".items = .{},\n");
-    }
-
-    try writer.writeByteNTimes(' ', width - 2);
-    try writer.writeByte('}');
 }

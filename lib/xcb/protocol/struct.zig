@@ -32,47 +32,59 @@ pub fn parse(self: *Protocol, parser: *xml.Parser) Protocol.ParseError!void {
         try str.fields.append(self.allocator, field);
     }
 
-    while (parser.next()) |ev| {
-        if (ev == .close_tag) {
-            if (std.mem.eql(u8, ev.close_tag, "struct")) break;
-        }
-    }
-
+    try self.endParse(parser, "struct");
     try self.structs.append(self.allocator, str);
 }
 
-pub fn format(self: *const Struct, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    const width = (options.width orelse 0) + 2;
+test "Parsing xproto setup struct" {
+    var parser = xml.Parser.init(
+        \\<struct name="Setup">
+        \\<field type="CARD8" name="status" /> <!-- always 1 -> Success -->
+        \\<pad bytes="1" />
+        \\<field type="CARD16" name="protocol_major_version" />
+        \\<field type="CARD16" name="protocol_minor_version" />
+        \\<field type="CARD16" name="length" />
+        \\<field type="CARD32" name="release_number" />
+        \\<field type="CARD32" name="resource_id_base" />
+        \\<field type="CARD32" name="resource_id_mask" />
+        \\<field type="CARD32" name="motion_buffer_size" />
+        \\<field type="CARD16" name="vendor_len" />
+        \\<field type="CARD16" name="maximum_request_length" />
+        \\<field type="CARD8" name="roots_len" />
+        \\<field type="CARD8" name="pixmap_formats_len" />
+        \\<field type="CARD8" name="image_byte_order" enum="ImageOrder" />
+        \\<field type="CARD8" name="bitmap_format_bit_order" enum="ImageOrder" />
+        \\<field type="CARD8" name="bitmap_format_scanline_unit" />
+        \\<field type="CARD8" name="bitmap_format_scanline_pad" />
+        \\<field type="KEYCODE" name="min_keycode" />
+        \\<field type="KEYCODE" name="max_keycode" />
+        \\<pad bytes="4" />
+        \\<list type="char" name="vendor">
+        \\<fieldref>vendor_len</fieldref>
+        \\</list>
+        \\<pad align="4" />
+        \\<list type="FORMAT" name="pixmap_formats">
+        \\<fieldref>pixmap_formats_len</fieldref>
+        \\</list>
+        \\<list type="SCREEN" name="roots">
+        \\<fieldref>roots_len</fieldref>
+        \\</list>
+        \\</struct>
+    );
 
-    try writer.writeAll(@typeName(Struct) ++ "{\n");
+    const protocol = try std.testing.allocator.create(Protocol);
+    protocol.* = .{
+        .allocator = std.testing.allocator,
+        .headerName = try std.testing.allocator.dupe(u8, "xproto"),
+    };
+    defer protocol.deinit();
 
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".name = \"");
-    try writer.writeAll(self.name);
-    try writer.writeAll("\",\n");
+    _ = parser.next();
+    try parse(protocol, &parser);
 
-    if (self.fields.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".fields = .{\n");
+    try std.testing.expectEqual(@as(usize, 1), protocol.structs.items.len);
 
-        for (self.fields.items) |f| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try f.format(fmt, .{
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-                .alignment = options.alignment,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".fields = .{},\n");
-    }
-
-    try writer.writeByteNTimes(' ', width - 2);
-    try writer.writeByte('}');
+    const self = protocol.structs.items[0];
+    try std.testing.expectEqualStrings("Setup", self.name);
+    try std.testing.expectEqual(@as(usize, 24), self.fields.items.len);
 }
