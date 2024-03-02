@@ -1,7 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-pub const ProtoGen = @import("lib/xcb/protogen.zig");
+pub const Protocol = @import("lib/xcb/protocol.zig");
 
 const LinkMode = if (@hasField(std.builtin.LinkMode, "static")) std.builtin.LinkMode else std.Build.Step.Compile.Linkage;
 
@@ -94,7 +94,6 @@ pub fn build(b: *std.Build) !void {
     const python3 = try b.findProgram(&.{ "python3", "python" }, &.{});
 
     const headers = b.addWriteFiles();
-    const moduleSource = b.addWriteFiles();
     var protoCSources = std.ArrayList([]const u8).init(b.allocator);
 
     const xcbprotoPath = blk: {
@@ -113,9 +112,6 @@ pub fn build(b: *std.Build) !void {
 
             _ = try man.addFile(xcbprotoSource.path(try std.fs.path.join(b.allocator, &.{ "src", entry.name })).getPath(xcbprotoSource.builder), null);
         }
-
-        var protosImport = std.ArrayList(u8).init(b.allocator);
-        defer protosImport.deinit();
 
         if (!(try man.hit())) {
             const digest = man.final();
@@ -147,15 +143,6 @@ pub fn build(b: *std.Build) !void {
                     .path = try std.fs.path.join(b.allocator, &.{ cachePath, header }),
                 }, try std.fs.path.join(b.allocator, &.{ "xcb", header }));
 
-                _ = moduleSource.addCopyFile(.{
-                    .generated = &(ProtoGen.create(b, xcbprotoSource.path(try std.fs.path.join(b.allocator, &.{ "src", entry.name })))).output,
-                }, try std.fs.path.join(b.allocator, &.{ "xcb", "proto", b.fmt("{s}.zig", .{entry.name[0..(entry.name.len - 4)]}) }));
-
-                try protosImport.writer().print(
-                    \\pub const {s} = @import("proto/{s}.zig");
-                    \\
-                , .{ entry.name[0..(entry.name.len - 4)], entry.name[0..(entry.name.len - 4)] });
-
                 try protoCSources.append(b.fmt("{s}.c", .{
                     entry.name[0..(entry.name.len - 4)],
                 }));
@@ -163,7 +150,6 @@ pub fn build(b: *std.Build) !void {
 
             try man.writeManifest();
 
-            _ = moduleSource.add("xcb/protos.zig", protosImport.items);
             break :blk cachePath;
         } else {
             const digest = man.final();
@@ -179,21 +165,11 @@ pub fn build(b: *std.Build) !void {
                     .path = try std.fs.path.join(b.allocator, &.{ cachePath, header }),
                 }, try std.fs.path.join(b.allocator, &.{ "xcb", header }));
 
-                _ = moduleSource.addCopyFile(.{
-                    .generated = &(ProtoGen.create(b, xcbprotoSource.path(try std.fs.path.join(b.allocator, &.{ "src", entry.name })))).output,
-                }, try std.fs.path.join(b.allocator, &.{ "xcb", "proto", b.fmt("{s}.zig", .{entry.name[0..(entry.name.len - 4)]}) }));
-
-                try protosImport.writer().print(
-                    \\pub const {s} = @import("proto/{s}.zig");
-                    \\
-                , .{ entry.name[0..(entry.name.len - 4)], entry.name[0..(entry.name.len - 4)] });
-
                 try protoCSources.append(b.fmt("{s}.c", .{
                     entry.name[0..(entry.name.len - 4)],
                 }));
             }
 
-            _ = moduleSource.add("xcb/protos.zig", protosImport.items);
             break :blk try b.cache_root.join(b.allocator, &.{ "o", &digest });
         }
     };
@@ -346,6 +322,33 @@ pub fn build(b: *std.Build) !void {
     xcbutilImage.linkLibrary(libxcbShm);
     b.installArtifact(xcbutilImage);
 
+    const moduleSource = b.addWriteFiles();
+    {
+        const protogen = b.addExecutable(.{
+            .name = "protogen",
+            .root_source_file = .{
+                .path = b.pathFromRoot("bin/protogen.zig"),
+            },
+            .target = b.host,
+            .optimize = optimize,
+            .linkage = linkage,
+        });
+
+        protogen.root_module.addImport("clap", clap.module("clap"));
+        protogen.root_module.addAnonymousImport("xcb", .{
+            .root_source_file = .{
+                .path = b.pathFromRoot("lib/xcb.zig"),
+            },
+            .target = b.host,
+            .optimize = optimize,
+        });
+
+        const protogenRun = b.addRunArtifact(protogen);
+        protogenRun.addDirectoryArg(xcbprotoSource.path("src"));
+        protogenRun.addArgs(&.{ "-g", "zig" });
+        _ = moduleSource.addCopyFile(protogenRun.captureStdOut(), "xcb/protos.zig");
+    }
+
     {
         var dir = try std.fs.openDirAbsolute(b.pathFromRoot("lib"), .{ .iterate = true });
         defer dir.close();
@@ -377,6 +380,14 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
 
+    module.addAnonymousImport("xcb", .{
+        .root_source_file = .{
+            .path = b.pathFromRoot("lib/xcb.zig"),
+        },
+        .target = target,
+        .optimize = optimize,
+    });
+
     module.addIncludePath(headers.getDirectory());
     module.linkLibrary(libxcb);
     module.linkLibrary(xcbutilImage);
@@ -384,7 +395,9 @@ pub fn build(b: *std.Build) !void {
     const step_test = b.step("test", "Run all unit tests");
 
     const unit_tests = b.addTest(.{
-        .root_source_file = module.root_source_file.?,
+        .root_source_file = .{
+            .path = b.pathFromRoot("lib/xcb.zig"),
+        },
         .target = target,
         .optimize = optimize,
         .link_libc = true,
