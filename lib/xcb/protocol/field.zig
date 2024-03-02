@@ -25,25 +25,6 @@ pub const EnumRef = struct {
             .type = try self.allocator.dupe(u8, ev2.character_data),
         };
     }
-
-    pub fn format(self: *EnumRef, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) @TypeOf(writer).Error!void {
-        const width = (options.width orelse 0) + 2;
-
-        try writer.writeAll(@typeName(EnumRef) ++ "{\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".ref = \"");
-        try writer.writeAll(self.ref);
-        try writer.writeAll("\",\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".type = \"");
-        try writer.writeAll(self.type);
-        try writer.writeAll("\",\n");
-
-        try writer.writeByteNTimes(' ', width - 2);
-        try writer.writeByte('}');
-    }
 };
 
 pub const NamedValue = struct {
@@ -74,30 +55,6 @@ pub const NamedValue = struct {
             .name = name,
             .value = value,
         };
-    }
-
-    pub fn format(self: *NamedValue, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) @TypeOf(writer).Error!void {
-        const width = (options.width orelse 0) + 2;
-
-        try writer.writeAll(@typeName(NamedValue) ++ "{\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".name = \"");
-        try writer.writeAll(self.name);
-        try writer.writeAll("\",\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".name = \"");
-        try self.value.format(fmt, .{
-            .width = width,
-            .fill = options.fill,
-            .precision = options.precision,
-            .alignment = options.alignment,
-        }, writer);
-        try writer.writeAll(",\n");
-
-        try writer.writeByteNTimes(' ', width - 2);
-        try writer.writeByte('}');
     }
 };
 
@@ -150,10 +107,7 @@ pub const Value = union(enum) {
                         parser.mode = mode;
                         return null;
                     },
-                    else => {
-                        std.debug.print("{}\n", .{v});
-                        return error.UnexpectedEvent;
-                    },
+                    else => return error.UnexpectedEvent,
                 }
             }
             return error.UnexpectedEndOfFile;
@@ -188,47 +142,6 @@ pub const Value = union(enum) {
                 };
             },
         };
-    }
-
-    pub fn format(self: *Value, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) @TypeOf(writer).Error!void {
-        const width = (options.width orelse 0) + 2;
-
-        try writer.writeAll(@typeName(Value) ++ "{\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeByte('.');
-        try writer.writeAll(@tagName(std.meta.activeTag(self.*)));
-        try writer.writeAll(" = ");
-
-        switch (self.*) {
-            .value => |v| try std.fmt.formatInt(v, 10, .lower, .{
-                .width = 0,
-                .fill = options.fill,
-                .precision = options.precision,
-                .alignment = options.alignment,
-            }, writer),
-            .fieldref => |v| {
-                try writer.writeByte('"');
-                try writer.writeAll(v);
-                try writer.writeByte('"');
-            },
-            .popcount => |v| try format(v, fmt, .{
-                .width = width,
-                .fill = options.fill,
-                .precision = options.precision,
-                .alignment = options.alignment,
-            }, writer),
-            inline else => |*v| try v.format(fmt, .{
-                .width = width,
-                .fill = options.fill,
-                .precision = options.precision,
-                .alignment = options.alignment,
-            }, writer),
-        }
-
-        try writer.writeAll(",\n");
-        try writer.writeByteNTimes(' ', width - 2);
-        try writer.writeByte('}');
     }
 };
 
@@ -272,42 +185,6 @@ pub const Op = struct {
         }
         return op;
     }
-
-    pub fn format(self: *const Op, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) @TypeOf(writer).Error!void {
-        const width = (options.width orelse 0) + 2;
-
-        try writer.writeAll(@typeName(Op) ++ "{\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".kind = ");
-        try std.zig.fmtId(@tagName(self.kind)).format(fmt, options, writer);
-        try writer.writeAll(",\n");
-
-        if (self.values.items.len > 0) {
-            try writer.writeByteNTimes(' ', width);
-            try writer.writeAll(".values = .{\n");
-
-            for (self.values.items) |*value| {
-                try writer.writeByteNTimes(' ', width + 2);
-                try value.format(fmt, .{
-                    .alignment = options.alignment,
-                    .width = width + 2,
-                    .fill = options.fill,
-                    .precision = options.precision,
-                }, writer);
-                try writer.writeAll(",\n");
-            }
-
-            try writer.writeByteNTimes(' ', width);
-            try writer.writeAll("},\n");
-        } else {
-            try writer.writeByteNTimes(' ', width);
-            try writer.writeAll(".values = .{},\n");
-        }
-
-        try writer.writeByteNTimes(' ', width - 2);
-        try writer.writeByte('}');
-    }
 };
 
 pub const Field = union(enum) {
@@ -324,6 +201,9 @@ pub const Field = union(enum) {
         pub fn deinit(self: Default, alloc: Allocator) void {
             alloc.free(self.type);
             alloc.free(self.name);
+
+            if (self.mask) |m| alloc.free(m);
+            if (self.@"enum") |e| alloc.free(e);
         }
 
         pub fn parse(self: *Protocol, parser: *xml.Parser) Protocol.ParseError!Default {
@@ -366,39 +246,6 @@ pub const Field = union(enum) {
             }
             return field;
         }
-
-        pub fn format(self: *const Default, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-            const width = (options.width orelse 0) + 2;
-
-            try writer.writeAll(@typeName(Default) ++ "{\n");
-
-            try writer.writeByteNTimes(' ', width);
-            try writer.writeAll(".type = \"");
-            try writer.writeAll(self.type);
-            try writer.writeAll("\",\n");
-
-            try writer.writeByteNTimes(' ', width);
-            try writer.writeAll(".name = \"");
-            try writer.writeAll(self.name);
-            try writer.writeAll("\",\n");
-
-            if (self.mask) |mask| {
-                try writer.writeByteNTimes(' ', width);
-                try writer.writeAll(".mask = \"");
-                try writer.writeAll(mask);
-                try writer.writeAll("\",\n");
-            }
-
-            if (self.@"enum") |e| {
-                try writer.writeByteNTimes(' ', width);
-                try writer.writeAll(".@\"enum\" = \"");
-                try writer.writeAll(e);
-                try writer.writeAll("\",\n");
-            }
-
-            try writer.writeByteNTimes(' ', width - 2);
-            try writer.writeByte('}');
-        }
     };
 
     pub const Pad = union(enum) {
@@ -423,36 +270,12 @@ pub const Field = union(enum) {
             }
             unreachable;
         }
-
-        pub fn format(self: *const Pad, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-            const width = (options.width orelse 0) + 2;
-
-            try writer.writeAll(@typeName(Pad) ++ "{\n");
-
-            try writer.writeByteNTimes(' ', width);
-            try writer.writeByte('.');
-            try writer.writeAll(@tagName(std.meta.activeTag(self.*)));
-            try writer.writeAll(" = ");
-
-            switch (self.*) {
-                inline else => |v| try std.fmt.formatInt(v, 10, .lower, .{
-                    .width = 0,
-                    .fill = options.fill,
-                    .precision = options.precision,
-                    .alignment = options.alignment,
-                }, writer),
-            }
-
-            try writer.writeAll(",\n");
-            try writer.writeByteNTimes(' ', width - 2);
-            try writer.writeByte('}');
-        }
     };
 
     pub const List = struct {
         type: []const u8,
         name: []const u8,
-        values: std.ArrayListUnmanaged(Value),
+        fieldref: ?[]const u8,
         mask: ?[]const u8,
         @"enum": ?[]const u8,
 
@@ -460,8 +283,9 @@ pub const Field = union(enum) {
             alloc.free(self.type);
             alloc.free(self.name);
 
-            for (self.values.items) |*value| value.deinit(alloc);
-            self.values.deinit(alloc);
+            if (self.fieldref) |fr| alloc.free(fr);
+            if (self.mask) |m| alloc.free(m);
+            if (self.@"enum") |e| alloc.free(e);
         }
 
         pub fn parse(self: *Protocol, parser: *xml.Parser) Protocol.ParseError!List {
@@ -495,15 +319,32 @@ pub const Field = union(enum) {
             var list = List{
                 .type = typenameValue,
                 .name = nameValue,
-                .values = .{},
+                .fieldref = null,
                 .mask = null,
                 .@"enum" = null,
             };
             errdefer list.deinit(self.allocator);
 
-            while (try Value.parse(self, parser)) |value| {
-                errdefer @constCast(&value).deinit(self.allocator);
-                try list.values.append(self.allocator, value);
+            {
+                const doc = parser.document;
+                const md = parser.mode;
+
+                const ev4 = parser.next() orelse return error.UnexpectedEndOfFile;
+                if (ev4 == .open_tag) {
+                    if (std.mem.eql(u8, ev4.open_tag, "fieldref")) {
+                        const ev5 = parser.next() orelse return error.UnexpectedEndOfFile;
+                        if (ev5 != .character_data) return error.UnexpectedEvent;
+
+                        list.fieldref = try self.allocator.dupe(u8, ev5.character_data);
+                        _ = parser.next();
+                    } else {
+                        parser.document = doc;
+                        parser.mode = md;
+                    }
+                } else {
+                    parser.document = doc;
+                    parser.mode = md;
+                }
             }
 
             if (ev3 == .attribute) {
@@ -514,61 +355,6 @@ pub const Field = union(enum) {
                 }
             }
             return list;
-        }
-
-        pub fn format(self: *const List, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-            const width = (options.width orelse 0) + 2;
-
-            try writer.writeAll(@typeName(List) ++ "{\n");
-
-            try writer.writeByteNTimes(' ', width);
-            try writer.writeAll(".type = \"");
-            try writer.writeAll(self.type);
-            try writer.writeAll("\",\n");
-
-            try writer.writeByteNTimes(' ', width);
-            try writer.writeAll(".name = \"");
-            try writer.writeAll(self.name);
-            try writer.writeAll("\",\n");
-
-            if (self.values.items.len > 0) {
-                try writer.writeByteNTimes(' ', width);
-                try writer.writeAll(".values = .{\n");
-
-                for (self.values.items) |*value| {
-                    try writer.writeByteNTimes(' ', width + 2);
-                    try value.format(fmt, .{
-                        .alignment = options.alignment,
-                        .width = width + 2,
-                        .fill = options.fill,
-                        .precision = options.precision,
-                    }, writer);
-                    try writer.writeAll(",\n");
-                }
-
-                try writer.writeByteNTimes(' ', width);
-                try writer.writeAll("},\n");
-            } else {
-                try writer.writeByteNTimes(' ', width);
-                try writer.writeAll(".values = .{},\n");
-            }
-
-            if (self.mask) |mask| {
-                try writer.writeByteNTimes(' ', width);
-                try writer.writeAll(".mask = \"");
-                try writer.writeAll(mask);
-                try writer.writeAll("\",\n");
-            }
-
-            if (self.@"enum") |e| {
-                try writer.writeByteNTimes(' ', width);
-                try writer.writeAll(".@\"enum\" = \"");
-                try writer.writeAll(e);
-                try writer.writeAll("\",\n");
-            }
-
-            try writer.writeByteNTimes(' ', width - 2);
-            try writer.writeByte('}');
         }
     };
 
@@ -602,10 +388,7 @@ pub const Field = union(enum) {
                         parser.mode = mode;
                         return null;
                     },
-                    else => {
-                        std.debug.print("{}\n", .{v});
-                        return error.UnexpectedEvent;
-                    },
+                    else => return error.UnexpectedEvent,
                 }
             }
             return error.UnexpectedEndOfFile;
@@ -616,29 +399,5 @@ pub const Field = union(enum) {
             .list => .{ .list = try List.parse(self, parser) },
             .pad => .{ .pad = try Pad.parse(self, parser) },
         };
-    }
-
-    pub fn format(self: *const Field, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        const width = (options.width orelse 0) + 2;
-
-        try writer.writeAll(@typeName(Field) ++ "{\n");
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeByte('.');
-        try writer.writeAll(@tagName(std.meta.activeTag(self.*)));
-        try writer.writeAll(" = ");
-
-        switch (self.*) {
-            inline else => |*v| try v.format(fmt, .{
-                .width = width,
-                .fill = options.fill,
-                .precision = options.precision,
-                .alignment = options.alignment,
-            }, writer),
-        }
-
-        try writer.writeAll(",\n");
-        try writer.writeByteNTimes(' ', width - 2);
-        try writer.writeByte('}');
     }
 };

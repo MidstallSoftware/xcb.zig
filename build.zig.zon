@@ -23,5 +23,9 @@
             .url = "https://gitlab.freedesktop.org/xorg/lib/libxcb-image/-/archive/xcb-util-image-0.4.1/libxcb-image-xcb-util-image-0.4.1.tar.gz",
             .hash = "122092beed2990a3b55f6ad7984159e2e53ef2372ecd36d95deeda007ee3903a6797",
         },
+        .clap = .{
+            .url = "https://github.com/MidstallSoftware/zig-clap/archive/2f0b4443b2a168e2ee545e595b104a9900bc3401.tar.gz",
+            .hash = "12201e606115ddfe830f1a585919bdebe27d2217114d05b03b617fc0f274218514d3",
+        },
     },
 }

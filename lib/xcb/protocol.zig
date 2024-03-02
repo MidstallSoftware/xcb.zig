@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 const xml = @import("../xml.zig");
 const Protocol = @This();
 
+pub const generators = @import("protocol/generators.zig");
+
 pub const Options = struct {
     directory: std.fs.Dir,
     source: std.fs.File,
@@ -12,7 +14,8 @@ pub const Copy = @import("protocol/copy.zig");
 pub const Enum = @import("protocol/enum.zig");
 pub const Error = @import("protocol/error.zig");
 pub const Event = @import("protocol/event.zig");
-pub const Field = @import("protocol/field.zig").Field;
+pub const EventStruct = @import("protocol/eventstruct.zig");
+pub usingnamespace @import("protocol/field.zig");
 pub const Request = @import("protocol/request.zig");
 pub const Struct = @import("protocol/struct.zig");
 pub const Union = @import("protocol/union.zig");
@@ -27,20 +30,21 @@ pub const ParseError = Allocator.Error || std.fs.Dir.OpenError || std.fs.File.Op
 };
 
 allocator: Allocator,
-imports: std.StringHashMapUnmanaged(*Protocol),
-enums: std.ArrayListUnmanaged(Enum),
-xidtypes: std.ArrayListUnmanaged([]const u8),
-xidunions: std.ArrayListUnmanaged(XidUnion),
-typedefs: std.StringHashMapUnmanaged([]const u8),
-errors: std.ArrayListUnmanaged(Error),
-structs: std.ArrayListUnmanaged(Struct),
-requests: std.ArrayListUnmanaged(Request),
-events: std.ArrayListUnmanaged(Event),
-copies: std.ArrayListUnmanaged(Copy),
-unions: std.ArrayListUnmanaged(Union),
-version: std.SemanticVersion,
+imports: std.StringHashMapUnmanaged(*Protocol) = .{},
+enums: std.ArrayListUnmanaged(Enum) = .{},
+xidtypes: std.ArrayListUnmanaged([]const u8) = .{},
+xidunions: std.ArrayListUnmanaged(XidUnion) = .{},
+typedefs: std.StringHashMapUnmanaged([]const u8) = .{},
+errors: std.ArrayListUnmanaged(Error) = .{},
+structs: std.ArrayListUnmanaged(Struct) = .{},
+requests: std.ArrayListUnmanaged(Request) = .{},
+events: std.ArrayListUnmanaged(Event) = .{},
+copies: std.ArrayListUnmanaged(Copy) = .{},
+unions: std.ArrayListUnmanaged(Union) = .{},
+eventstructs: std.ArrayListUnmanaged(EventStruct) = .{},
+version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
 headerName: []const u8,
-extName: ?[]const u8,
+extName: ?[]const u8 = null,
 
 pub fn create(alloc: Allocator, options: Options) !*Protocol {
     const src = try options.source.readToEndAlloc(alloc, (try options.source.metadata()).size());
@@ -53,20 +57,7 @@ pub fn create(alloc: Allocator, options: Options) !*Protocol {
 
     self.* = .{
         .allocator = alloc,
-        .imports = .{},
-        .enums = .{},
-        .xidtypes = .{},
-        .xidunions = .{},
-        .typedefs = .{},
-        .errors = .{},
-        .structs = .{},
-        .requests = .{},
-        .events = .{},
-        .copies = .{},
-        .unions = .{},
-        .version = .{ .major = 0, .minor = 0, .patch = 0 },
         .headerName = undefined,
-        .extName = null,
     };
 
     while (parser.next()) |ev| switch (ev) {
@@ -78,6 +69,64 @@ pub fn create(alloc: Allocator, options: Options) !*Protocol {
     };
 
     return error.UnexpectedEndOfFile;
+}
+
+pub fn hasType(self: *const Protocol, typeName: []const u8) bool {
+    for (self.enums.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+
+    for (self.xidtypes.items) |e| {
+        if (std.mem.eql(u8, e, typeName)) return true;
+    }
+
+    for (self.xidunions.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+
+    {
+        var iter = self.typedefs.keyIterator();
+        while (iter.next()) |e| {
+            if (std.mem.eql(u8, e.*, typeName)) return true;
+        }
+    }
+
+    for (self.errors.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+
+    for (self.structs.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+
+    for (self.requests.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+
+    for (self.events.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+
+    for (self.copies.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+
+    for (self.unions.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+
+    for (self.eventstructs.items) |e| {
+        if (std.mem.eql(u8, e.name, typeName)) return true;
+    }
+    return false;
+}
+
+pub fn findImportForType(self: *const Protocol, typeName: []const u8) ?[]const u8 {
+    var iter = self.imports.iterator();
+    while (iter.next()) |entry| {
+        if (hasType(entry.value_ptr.*, typeName)) return entry.key_ptr.*;
+    }
+    return null;
 }
 
 fn parseToplevel(self: *Protocol, parser: *xml.Parser, directory: std.fs.Dir) ParseError!void {
@@ -115,6 +164,8 @@ fn parseToplevel(self: *Protocol, parser: *xml.Parser, directory: std.fs.Dir) Pa
             try Event.parse(self, parser);
         } else if (std.mem.eql(u8, tag, "union")) {
             try Union.parse(self, parser);
+        } else if (std.mem.eql(u8, tag, "eventstruct")) {
+            try EventStruct.parse(self, parser);
         } else if (std.mem.endsWith(u8, tag, "copy")) {
             try Copy.parse(self, parser, tag[0..(tag.len - 4)]);
         },
@@ -178,7 +229,7 @@ fn parseTypedef(self: *Protocol, parser: *xml.Parser) ParseError!void {
 pub fn deinit(self: *Protocol) void {
     {
         var iter = self.imports.valueIterator();
-        while (iter.next()) |import| import.*.deinit();
+        while (iter.next()) |import| deinit(import.*);
         self.imports.deinit(self.allocator);
     }
 
@@ -209,274 +260,63 @@ pub fn deinit(self: *Protocol) void {
     for (self.requests.items) |*req| req.deinit(self.allocator);
     self.requests.deinit(self.allocator);
 
+    for (self.eventstructs.items) |*ev| ev.deinit(self.allocator);
+    self.eventstructs.deinit(self.allocator);
+
     self.allocator.free(self.headerName);
     if (self.extName) |extName| self.allocator.free(extName);
 
     self.allocator.destroy(self);
 }
 
-pub fn format(self: *const Protocol, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    const width = (options.width orelse 0) + 2;
+pub fn endParse(self: *Protocol, parser: *xml.Parser, name: []const u8) !void {
+    _ = self;
 
-    try writer.writeAll(@typeName(Protocol) ++ "{\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".headerName = \"");
-    try writer.writeAll(self.headerName);
-    try writer.writeAll("\",\n");
-
-    if (self.extName) |extName| {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".extName = \"");
-        try writer.writeAll(extName);
-        try writer.writeAll("\",\n");
-    }
-
-    if (self.version.major > 0 or self.version.minor > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".version = \"");
-        try std.fmt.format(writer, "{d}.{d}", .{ self.version.major, self.version.minor });
-        try writer.writeAll("\",\n");
-    }
-
-    if (self.imports.count() > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".imports = .{\n");
-
-        var iter = self.imports.valueIterator();
-        while (iter.next()) |import| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try import.*.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
+    while (true) {
+        const ev = parser.next() orelse break;
+        if (ev == .close_tag) {
+            if (std.mem.eql(u8, ev.close_tag, name)) {
+                return;
+            }
         }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".imports = .{},\n");
     }
+    return error.UnexpectedEndOfFile;
+}
 
-    if (self.enums.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".enums = .{\n");
+pub fn generate(self: *const Protocol, generator: std.meta.DeclEnum(generators)) std.fmt.Formatter(fmtGenerate) {
+    return .{ .data = .{ self, generator } };
+}
 
-        for (self.enums.items) |e| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try e.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
+fn fmtGenerate(data: struct { *const Protocol, std.meta.DeclEnum(generators) }, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+    inline for (comptime std.meta.declarations(generators)) |decl| {
+        if (std.mem.eql(u8, decl.name, @tagName(data[1]))) {
+            return try @field(generators, decl.name).fmtProtocol(data[0], (options.width orelse 0) + 2, writer);
         }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".enums = .{},\n");
     }
+    unreachable;
+}
 
-    if (self.xidtypes.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".xidtypes = .{\n");
+pub fn generateSet(protos: []const *Protocol, generator: std.meta.DeclEnum(generators)) std.fmt.Formatter(fmtGenerateSet) {
+    return .{ .data = .{ protos, generator } };
+}
 
-        for (self.xidtypes.items) |item| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try writer.writeByte('"');
-            try writer.writeAll(item);
-            try writer.writeAll("\",\n");
+fn fmtGenerateSet(data: struct { []const *Protocol, std.meta.DeclEnum(generators) }, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+    inline for (comptime std.meta.declarations(generators)) |decl| {
+        if (std.mem.eql(u8, decl.name, @tagName(data[1]))) {
+            return try @field(generators, decl.name).fmtProtocols(data[0], (options.width orelse 0) + 2, writer);
         }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".xidtypes = .{},\n");
     }
+    unreachable;
+}
 
-    if (self.xidunions.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".xidunions = .{\n");
-
-        for (self.xidunions.items) |item| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try item.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll("\",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".xidunions = .{},\n");
-    }
-
-    if (self.typedefs.count() > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".typedefs = .{\n");
-
-        var iter = self.typedefs.iterator();
-        while (iter.next()) |entry| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try writer.writeByte('.');
-            try writer.writeAll(entry.key_ptr.*);
-            try writer.writeAll(" = \"");
-            try writer.writeAll(entry.value_ptr.*);
-            try writer.writeAll("\",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".typedefs = .{},\n");
-    }
-
-    if (self.errors.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".errors = .{\n");
-
-        for (self.errors.items) |err| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try err.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".errors = .{},\n");
-    }
-
-    if (self.structs.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".structs = .{\n");
-
-        for (self.structs.items) |str| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try str.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".structs = .{},\n");
-    }
-
-    if (self.requests.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".requests = .{\n");
-
-        for (self.requests.items) |req| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try req.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".requests = .{},\n");
-    }
-
-    if (self.events.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".events = .{\n");
-
-        for (self.events.items) |ev| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try ev.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".events = .{},\n");
-    }
-
-    if (self.copies.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".copies = .{\n");
-
-        for (self.copies.items) |copy| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try copy.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".copies = .{},\n");
-    }
-
-    if (self.unions.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".unions = .{\n");
-
-        for (self.unions.items) |u| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try u.format(fmt, .{
-                .alignment = options.alignment,
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".unions = .{},\n");
-    }
-
-    try writer.writeByteNTimes(' ', width - 2);
-    try writer.writeByte('}');
+test {
+    _ = Copy;
+    _ = Enum;
+    _ = Error;
+    _ = Event;
+    _ = EventStruct;
+    _ = Request;
+    _ = Struct;
+    _ = Union;
+    _ = XidUnion;
 }

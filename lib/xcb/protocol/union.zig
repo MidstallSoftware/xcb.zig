@@ -40,39 +40,3 @@ pub fn parse(self: *Protocol, parser: *xml.Parser) Protocol.ParseError!void {
 
     try self.unions.append(self.allocator, str);
 }
-
-pub fn format(self: *const Union, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    const width = (options.width orelse 0) + 2;
-
-    try writer.writeAll(@typeName(Union) ++ "{\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".name = \"");
-    try writer.writeAll(self.name);
-    try writer.writeAll("\",\n");
-
-    if (self.fields.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".fields = .{\n");
-
-        for (self.fields.items) |f| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try f.format(fmt, .{
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-                .alignment = options.alignment,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".fields = .{},\n");
-    }
-
-    try writer.writeByteNTimes(' ', width - 2);
-    try writer.writeByte('}');
-}

@@ -69,6 +69,9 @@ pub fn parse(self: *Protocol, parser: *xml.Parser) Protocol.ParseError!void {
     }
 
     {
+        const doc = parser.document;
+        const mode = parser.mode;
+
         const ev = parser.next() orelse return error.UnexpectedEndOfFile;
         if (ev == .open_tag) {
             if (std.mem.eql(u8, ev.open_tag, "reply")) {
@@ -76,87 +79,16 @@ pub fn parse(self: *Protocol, parser: *xml.Parser) Protocol.ParseError!void {
                     errdefer field.deinit(self.allocator);
                     try req.reply.append(self.allocator, field);
                 }
+            } else {
+                parser.document = doc;
+                parser.mode = mode;
             }
+        } else {
+            parser.document = doc;
+            parser.mode = mode;
         }
     }
 
-    while (parser.next()) |ev| {
-        if (ev == .close_tag) {
-            if (std.mem.eql(u8, ev.close_tag, "request")) break;
-        }
-    }
-
+    try self.endParse(parser, "request");
     try self.requests.append(self.allocator, req);
-}
-
-pub fn format(self: *const Request, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    const width = (options.width orelse 0) + 2;
-
-    try writer.writeAll(@typeName(Request) ++ "{\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".name = \"");
-    try writer.writeAll(self.name);
-    try writer.writeAll("\",\n");
-
-    try writer.writeByteNTimes(' ', width);
-    try writer.writeAll(".opcode = ");
-    try std.fmt.formatInt(self.opcode, 10, .lower, .{
-        .width = 0,
-        .fill = options.fill,
-        .precision = options.precision,
-        .alignment = options.alignment,
-    }, writer);
-    try writer.writeAll(",\n");
-
-    if (self.fields.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".fields = .{\n");
-
-        for (self.fields.items) |f| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try f.format(fmt, .{
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-                .alignment = options.alignment,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    } else {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".fields = .{},\n");
-    }
-
-    if (self.reply.items.len > 0) {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".reply = .{\n");
-
-        for (self.reply.items) |f| {
-            try writer.writeByteNTimes(' ', width + 2);
-            try f.format(fmt, .{
-                .width = width + 2,
-                .fill = options.fill,
-                .precision = options.precision,
-                .alignment = options.alignment,
-            }, writer);
-            try writer.writeAll(",\n");
-        }
-
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll("},\n");
-    }
-
-    if (self.combineAdjacent) |combineAdjacent| {
-        try writer.writeByteNTimes(' ', width);
-        try writer.writeAll(".combineAdjacent = ");
-        try writer.writeAll(if (combineAdjacent) "true" else "false");
-        try writer.writeAll(",\n");
-    }
-
-    try writer.writeByteNTimes(' ', width - 2);
-    try writer.writeByte('}');
 }
