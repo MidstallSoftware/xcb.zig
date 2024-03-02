@@ -415,4 +415,23 @@ pub fn build(b: *std.Build) !void {
 
     example.root_module.addImport("xcb", module);
     b.installArtifact(example);
+
+    const protogen = b.addExecutable(.{
+        .name = "protogen",
+        .root_source_file = .{
+            .path = b.pathFromRoot("bin/protogen.zig"),
+        },
+        .target = target,
+        .optimize = optimize,
+        .linkage = linkage,
+    });
+
+    protogen.root_module.addAnonymousImport("xcb", .{
+        .root_source_file = .{
+            .path = b.pathFromRoot("lib/xcb.zig"),
+        },
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(protogen);
 }
