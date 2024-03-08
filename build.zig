@@ -72,6 +72,11 @@ pub fn build(b: *std.Build) !void {
     const no_docs = b.option(bool, "no-docs", "skip installing documentation") orelse false;
     const linkage = b.option(LinkMode, "linkage", "whether to statically or dynamically link the library") orelse @as(LinkMode, if (target.result.isGnuLibC()) .dynamic else .static);
 
+    const clap = b.dependency("clap", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const libxcbSource = b.dependency("libxcb", .{});
     const xcbprotoSource = b.dependency("xcbproto", .{});
 
@@ -415,4 +420,25 @@ pub fn build(b: *std.Build) !void {
 
     example.root_module.addImport("xcb", module);
     b.installArtifact(example);
+
+    const protogen = b.addExecutable(.{
+        .name = "protogen",
+        .root_source_file = .{
+            .path = b.pathFromRoot("bin/protogen.zig"),
+        },
+        .target = target,
+        .optimize = optimize,
+        .linkage = linkage,
+    });
+
+    protogen.root_module.addImport("clap", clap.module("clap"));
+
+    protogen.root_module.addAnonymousImport("xcb", .{
+        .root_source_file = .{
+            .path = b.pathFromRoot("lib/xcb.zig"),
+        },
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(protogen);
 }
