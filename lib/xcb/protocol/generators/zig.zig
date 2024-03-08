@@ -115,7 +115,7 @@ pub fn fmtField(proto: *const Protocol, padNumber: usize, field: *const Protocol
     }
 }
 
-pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentName: []const u8, initPads: usize, width: usize, writer: anytype) !void {
+pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentName: []const u8, parentNameFunc: []const u8, initPads: usize, width: usize, writer: anytype) !void {
     var pads: usize = initPads;
     for (fields, 0..) |*field, i| {
         if (i == 0 and initPads > 0 and field.* == .pad) continue;
@@ -148,7 +148,7 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
 
     try writer.writeByteNTimes(' ', width + 2);
     try writer.writeAll("extern fn ");
-    try fmtExtFuncName(proto.extName, parentName, writer);
+    try fmtExtFuncName(proto.extName, parentNameFunc, writer);
     try writer.writeAll("_next(*Iterator) void;\n");
 
     try writer.writeByteNTimes(' ', width + 2);
@@ -163,7 +163,7 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
     try writer.writeAll("const value = self.data;\n");
 
     try writer.writeByteNTimes(' ', width + 4);
-    try fmtExtFuncName(proto.extName, parentName, writer);
+    try fmtExtFuncName(proto.extName, parentNameFunc, writer);
     try writer.writeAll("_next(self);\n");
 
     try writer.writeByteNTimes(' ', width + 4);
@@ -182,7 +182,7 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
 
         try writer.writeByteNTimes(' ', width);
         try writer.writeAll("extern fn ");
-        try fmtExtFuncName(proto.extName, parentName, writer);
+        try fmtExtFuncName(proto.extName, parentNameFunc, writer);
         try writer.writeAll("_");
         try writer.writeAll(field.list.name);
         try writer.writeAll("_length(*const ");
@@ -193,7 +193,7 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
         try writer.writeAll("pub const ");
         try fmtZigFunc(field.list.name, writer);
         try writer.writeAll("Length = ");
-        try fmtExtFuncName(proto.extName, parentName, writer);
+        try fmtExtFuncName(proto.extName, parentNameFunc, writer);
         try writer.writeAll("_");
         try writer.writeAll(field.list.name);
         try writer.writeAll("_length;\n");
@@ -202,7 +202,7 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
             try writer.writeAll("\n");
             try writer.writeByteNTimes(' ', width);
             try writer.writeAll("extern fn ");
-            try fmtExtFuncName(proto.extName, parentName, writer);
+            try fmtExtFuncName(proto.extName, parentNameFunc, writer);
             try writer.writeAll("_");
             try writer.writeAll(field.list.name);
             try writer.writeAll("(*const ");
@@ -218,14 +218,14 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
 
             try writer.writeByteNTimes(' ', width + 2);
             try writer.writeAll("const len: usize = @intCast(");
-            try fmtExtFuncName(proto.extName, parentName, writer);
+            try fmtExtFuncName(proto.extName, parentNameFunc, writer);
             try writer.writeAll("_");
             try writer.writeAll(field.list.name);
             try writer.writeAll("_length(self));\n");
 
             try writer.writeByteNTimes(' ', width + 2);
             try writer.writeAll("const slice = ");
-            try fmtExtFuncName(proto.extName, parentName, writer);
+            try fmtExtFuncName(proto.extName, parentNameFunc, writer);
             try writer.writeAll("_");
             try writer.writeAll(field.list.name);
             try writer.writeAll("(self);\n");
@@ -239,7 +239,7 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
             try writer.writeAll("\n");
             try writer.writeByteNTimes(' ', width);
             try writer.writeAll("extern fn ");
-            try fmtExtFuncName(proto.extName, parentName, writer);
+            try fmtExtFuncName(proto.extName, parentNameFunc, writer);
             try writer.writeAll("_");
             try writer.writeAll(field.list.name);
             try writer.writeAll("_iterator(*const ");
@@ -252,7 +252,7 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
             try writer.writeAll("pub const ");
             try fmtZigFunc(field.list.name, writer);
             try writer.writeAll("Iterator = ");
-            try fmtExtFuncName(proto.extName, parentName, writer);
+            try fmtExtFuncName(proto.extName, parentNameFunc, writer);
             try writer.writeAll("_");
             try writer.writeAll(field.list.name);
             try writer.writeAll("_iterator;\n");
@@ -266,7 +266,7 @@ pub fn fmtStruct(proto: *const Protocol, str: *const Protocol.Struct, width: usi
     try writer.writeAll(str.name);
     try writer.writeAll(" = extern struct {\n");
 
-    try fmtFields(proto, str.fields.items, str.name, 0, width + 2, writer);
+    try fmtFields(proto, str.fields.items, str.name, str.name, 0, width + 2, writer);
 
     try writer.writeByteNTimes(' ', width);
     try writer.writeAll("};\n");
@@ -278,7 +278,7 @@ pub fn fmtUnion(proto: *const Protocol, u: *const Protocol.Union, width: usize, 
     try writer.writeAll(u.name);
     try writer.writeAll(" = extern union {\n");
 
-    try fmtFields(proto, u.fields.items, u.name, 0, width + 2, writer);
+    try fmtFields(proto, u.fields.items, u.name, u.name, 0, width + 2, writer);
 
     try writer.writeByteNTimes(' ', width);
     try writer.writeAll("};\n");
@@ -314,7 +314,7 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
         try name.appendSlice(req.name);
         try name.appendSlice("Request");
 
-        try fmtFields(proto, req.fields.items, name.items, 1, width + 2, writer);
+        try fmtFields(proto, req.fields.items, name.items, req.name, 1, width + 2, writer);
     }
 
     try writer.writeByteNTimes(' ', width);
@@ -344,7 +344,7 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
             try name.appendSlice(req.name);
             try name.appendSlice("Reply");
 
-            try fmtFields(proto, req.reply.items, name.items, 1, width + 2, writer);
+            try fmtFields(proto, req.reply.items, name.items, req.name, 1, width + 2, writer);
         }
 
         try writer.writeByteNTimes(' ', width);

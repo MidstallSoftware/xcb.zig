@@ -10,8 +10,12 @@ pub fn main() !void {
 
     var iter = setup.rootsIterator();
     while (iter.next()) |screen| {
-        const screenCount = try xcb.xinerama.getScreenCount(@ptrCast(@alignCast(conn)), screen.root).reply(@ptrCast(@alignCast(conn)));
-        std.debug.print("{}\n", .{screenCount});
+        const monitors = try xcb.randr.getMonitors(@ptrCast(@alignCast(conn)), screen.root, 0).reply(@ptrCast(@alignCast(conn)));
+        var monitorsIter = monitors.monitorsIterator();
+
+        while (monitorsIter.next()) |monitor| {
+            std.debug.print("{}\n", .{monitor});
+        }
     }
 
     while (conn.waitForEvent() catch null) |ev| {
