@@ -14,9 +14,13 @@ pub fn main() !void {
         var monitorsIter = monitors.monitorsIterator();
 
         while (monitorsIter.next()) |monitor| {
-            std.debug.print("{}\n", .{monitor});
+            std.debug.print("{} {}\n", .{ monitor, @sizeOf(@TypeOf(monitor)) });
             for (monitor.outputs()) |output| {
-                std.debug.print("{}\n", .{output});
+                const outputInfo = try xcb.randr.getOutputInfo(conn, output, 0).reply(conn);
+                std.debug.print("{} {}\n", .{ outputInfo, @sizeOf(@TypeOf(outputInfo.*)) });
+
+                const crtcInfo = try xcb.randr.getCrtcInfo(conn, outputInfo.crtc, 0).reply(conn);
+                std.debug.print("{} {}\n", .{ crtcInfo, @sizeOf(@TypeOf(crtcInfo.*)) });
             }
         }
     }

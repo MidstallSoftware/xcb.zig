@@ -116,20 +116,20 @@ pub fn fmtField(proto: *const Protocol, padNumber: usize, field: *const Protocol
     }
 }
 
-pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentName: []const u8, parentNameFunc: []const u8, initPads: usize, width: usize, writer: anytype) !void {
+pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentName: []const u8, parentNameFunc: []const u8, initPads: usize, offset: usize, width: usize, writer: anytype) !void {
     var pads: usize = initPads;
-    for (fields, 0..) |*field, i| {
-        if (i == 0 and initPads > 0 and field.* == .pad) continue;
+    if (fields.len > offset) {
+        for (fields[offset..]) |*field| {
+            if (field.* == .list) {
+                if (field.list.fieldref != null) continue;
+            }
 
-        if (field.* == .list) {
-            if (field.list.fieldref != null) continue;
+            if (field.* == .pad and field.pad == .@"align") continue;
+
+            try writer.writeByteNTimes(' ', width);
+            try fmtField(proto, pads, field, width, writer);
+            if (field.* == .pad) pads += 1;
         }
-
-        if (field.* == .pad and field.pad == .@"align") continue;
-
-        try writer.writeByteNTimes(' ', width);
-        try fmtField(proto, pads, field, width, writer);
-        if (field.* == .pad) pads += 1;
     }
 
     try writer.writeAll("\n");
@@ -271,7 +271,7 @@ pub fn fmtStruct(proto: *const Protocol, str: *const Protocol.Struct, width: usi
     try writer.writeAll(str.name);
     try writer.writeAll(" = extern struct {\n");
 
-    try fmtFields(proto, str.fields.items, str.name, str.name, 0, width + 2, writer);
+    try fmtFields(proto, str.fields.items, str.name, str.name, 0, 0, width + 2, writer);
 
     try writer.writeByteNTimes(' ', width);
     try writer.writeAll("};\n");
@@ -283,7 +283,7 @@ pub fn fmtUnion(proto: *const Protocol, u: *const Protocol.Union, width: usize, 
     try writer.writeAll(u.name);
     try writer.writeAll(" = extern union {\n");
 
-    try fmtFields(proto, u.fields.items, u.name, u.name, 0, width + 2, writer);
+    try fmtFields(proto, u.fields.items, u.name, u.name, 0, 0, width + 2, writer);
 
     try writer.writeByteNTimes(' ', width);
     try writer.writeAll("};\n");
@@ -319,7 +319,7 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
         try name.appendSlice(req.name);
         try name.appendSlice("Request");
 
-        try fmtFields(proto, req.fields.items, name.items, req.name, 1, width + 2, writer);
+        try fmtFields(proto, req.fields.items, name.items, req.name, 1, 0, width + 2, writer);
     }
 
     try writer.writeByteNTimes(' ', width);
@@ -334,22 +334,22 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
         try writer.writeByteNTimes(' ', width + 2);
         try writer.writeAll("response_type: u8,\n");
 
-        try writer.writeByteNTimes(' ', width + 2);
-        try writer.writeAll("pad0: u8,\n");
-
-        try writer.writeByteNTimes(' ', width + 2);
-        try writer.writeAll("sequence: u16,\n");
-
-        try writer.writeByteNTimes(' ', width + 2);
-        try writer.writeAll("length: u32,\n");
-
         {
             var name = std.ArrayList(u8).init(proto.allocator);
             defer name.deinit();
             try name.appendSlice(req.name);
             try name.appendSlice("Reply");
 
-            try fmtFields(proto, req.reply.items, name.items, req.name, 1, width + 2, writer);
+            try writer.writeByteNTimes(' ', width);
+            try fmtField(proto, 0, &req.reply.items[0], width + 2, writer);
+
+            try writer.writeByteNTimes(' ', width + 2);
+            try writer.writeAll("sequence: u16,\n");
+
+            try writer.writeByteNTimes(' ', width + 2);
+            try writer.writeAll("length: u32,\n");
+
+            try fmtFields(proto, req.reply.items, name.items, req.name, if (req.reply.items[0] == .pad) 1 else 0, 1, width + 2, writer);
         }
 
         try writer.writeByteNTimes(' ', width);
@@ -536,7 +536,7 @@ pub fn fmtProtocol(proto: *const Protocol, width: usize, writer: anytype) !void 
         try writer.writeByteNTimes(' ', width);
         try writer.writeAll("pub const ");
         try std.zig.fmtId(xidtype).format("", .{}, writer);
-        try writer.writeAll(" = packed struct {\n");
+        try writer.writeAll(" = extern struct {\n");
 
         try writer.writeByteNTimes(' ', width + 2);
         try writer.writeAll("value: u32,\n\n");
