@@ -10,7 +10,7 @@ pub fn main() !void {
 
     var iter = setup.rootsIterator();
     while (iter.next()) |screen| {
-        const monitors = try xcb.randr.getMonitors(@ptrCast(@alignCast(conn)), screen.root, 0).reply(@ptrCast(@alignCast(conn)));
+        const monitors = try xcb.randr.getMonitors(conn, screen.root, 0).reply(conn);
         var monitorsIter = monitors.monitorsIterator();
 
         while (monitorsIter.next()) |monitor| {

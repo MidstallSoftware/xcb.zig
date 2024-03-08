@@ -1,4 +1,5 @@
 const std = @import("std");
+const options = @import("options");
 const Protocol = @import("../../protocol.zig");
 const Self = @This();
 
@@ -499,7 +500,7 @@ pub fn fmtProtocol(proto: *const Protocol, width: usize, writer: anytype) !void 
     try writer.writeAll("const assert = std.debug.assert;\n");
 
     try writer.writeByteNTimes(' ', width);
-    try writer.writeAll("const xcb = @import(\"xcb\");\n\n");
+    try writer.writeAll("const xcb = @import(\"" ++ options.importName ++ "\");\n\n");
 
     if (proto.extName) |extName| {
         try writer.writeByteNTimes(' ', width);

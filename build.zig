@@ -322,6 +322,12 @@ pub fn build(b: *std.Build) !void {
     xcbutilImage.linkLibrary(libxcbShm);
     b.installArtifact(xcbutilImage);
 
+    const bootstrapOptions = b.addOptions();
+    bootstrapOptions.addOption([]const u8, "importName", "../xcb.zig");
+
+    const options = b.addOptions();
+    options.addOption([]const u8, "importName", "xcb");
+
     const moduleSource = b.addWriteFiles();
     {
         const protogen = b.addExecutable(.{
@@ -341,6 +347,12 @@ pub fn build(b: *std.Build) !void {
             },
             .target = b.host,
             .optimize = optimize,
+            .imports = &.{
+                .{
+                    .name = "options",
+                    .module = bootstrapOptions.createModule(),
+                },
+            },
         });
 
         const protogenRun = b.addRunArtifact(protogen);
@@ -380,13 +392,7 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
 
-    module.addAnonymousImport("xcb", .{
-        .root_source_file = .{
-            .path = b.pathFromRoot("lib/xcb.zig"),
-        },
-        .target = target,
-        .optimize = optimize,
-    });
+    module.addImport("options", options.createModule());
 
     module.addIncludePath(headers.getDirectory());
     module.linkLibrary(libxcb);
@@ -402,6 +408,8 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
+
+    unit_tests.root_module.addImport("options", bootstrapOptions.createModule());
 
     unit_tests.addIncludePath(headers.getDirectory());
     unit_tests.linkLibrary(libxcb);
@@ -452,6 +460,12 @@ pub fn build(b: *std.Build) !void {
         },
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{
+                .name = "options",
+                .module = options.createModule(),
+            },
+        },
     });
     b.installArtifact(protogen);
 }
