@@ -160,14 +160,14 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
     try writer.writeAll("if (self.rem == 0) return null;\n");
 
     try writer.writeByteNTimes(' ', width + 4);
-    try writer.writeAll("const value = self.data;\n");
+    try writer.writeAll("const iteratorValue = self.data;\n");
 
     try writer.writeByteNTimes(' ', width + 4);
     try fmtExtFuncName(proto.extName, parentNameFunc, writer);
     try writer.writeAll("_next(self);\n");
 
     try writer.writeByteNTimes(' ', width + 4);
-    try writer.writeAll("return value;\n");
+    try writer.writeAll("return iteratorValue;\n");
 
     try writer.writeByteNTimes(' ', width + 2);
     try writer.writeAll("}\n");
@@ -198,7 +198,7 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
         try writer.writeAll(field.list.name);
         try writer.writeAll("_length;\n");
 
-        if (std.mem.eql(u8, field.list.type, "char")) {
+        if (proto.isPrimitiveType(field.list.type)) {
             try writer.writeAll("\n");
             try writer.writeByteNTimes(' ', width);
             try writer.writeAll("extern fn ");
@@ -207,14 +207,18 @@ pub fn fmtFields(proto: *const Protocol, fields: []const Protocol.Field, parentN
             try writer.writeAll(field.list.name);
             try writer.writeAll("(*const ");
             try writer.writeAll(parentName);
-            try writer.writeAll(") [*]const u8;\n");
+            try writer.writeAll(") [*]const ");
+            try fmtTypeName(proto, field.list.type, writer);
+            try writer.writeAll(";\n");
 
             try writer.writeByteNTimes(' ', width);
             try writer.writeAll("pub fn ");
             try fmtZigFunc(field.list.name, writer);
             try writer.writeAll("(self: *const ");
             try writer.writeAll(parentName);
-            try writer.writeAll(") []const u8 {\n");
+            try writer.writeAll(") []const ");
+            try fmtTypeName(proto, field.list.type, writer);
+            try writer.writeAll("{\n");
 
             try writer.writeByteNTimes(' ', width + 2);
             try writer.writeAll("const len: usize = @intCast(");
@@ -526,10 +530,58 @@ pub fn fmtProtocol(proto: *const Protocol, width: usize, writer: anytype) !void 
     }
 
     for (proto.xidtypes.items) |xidtype| {
+        try writer.writeAll("\n");
+
         try writer.writeByteNTimes(' ', width);
         try writer.writeAll("pub const ");
         try std.zig.fmtId(xidtype).format("", .{}, writer);
-        try writer.writeAll(" = u32;\n");
+        try writer.writeAll(" = packed struct {\n");
+
+        try writer.writeByteNTimes(' ', width + 2);
+        try writer.writeAll("value: u32,\n\n");
+
+        try writer.writeByteNTimes(' ', width + 2);
+        try writer.writeAll("pub const Iterator = extern struct {\n");
+
+        try writer.writeByteNTimes(' ', width + 4);
+        try writer.writeAll("data: *u32");
+        try writer.writeAll(",\n");
+
+        try writer.writeByteNTimes(' ', width + 4);
+        try writer.writeAll("rem: c_int,\n");
+
+        try writer.writeByteNTimes(' ', width + 4);
+        try writer.writeAll("index: c_int,\n\n");
+
+        try writer.writeByteNTimes(' ', width + 4);
+        try writer.writeAll("extern fn ");
+        try fmtExtFuncName(proto.extName, xidtype, writer);
+        try writer.writeAll("_next(*Iterator) void;\n");
+
+        try writer.writeByteNTimes(' ', width + 4);
+        try writer.writeAll("pub fn next(self: *Iterator) ?*u32 {\n");
+
+        try writer.writeByteNTimes(' ', width + 6);
+        try writer.writeAll("if (self.rem == 0) return null;\n");
+
+        try writer.writeByteNTimes(' ', width + 6);
+        try writer.writeAll("const value = self.data;\n");
+
+        try writer.writeByteNTimes(' ', width + 6);
+        try fmtExtFuncName(proto.extName, xidtype, writer);
+        try writer.writeAll("_next(self);\n");
+
+        try writer.writeByteNTimes(' ', width + 6);
+        try writer.writeAll("return value;\n");
+
+        try writer.writeByteNTimes(' ', width + 4);
+        try writer.writeAll("}\n");
+
+        try writer.writeByteNTimes(' ', width + 2);
+        try writer.writeAll("};\n");
+
+        try writer.writeByteNTimes(' ', width);
+        try writer.writeAll("};\n");
     }
 
     for (proto.xidunions.items) |*xidunion| {

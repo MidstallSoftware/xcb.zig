@@ -71,6 +71,25 @@ pub fn create(alloc: Allocator, options: Options) !*Protocol {
     return error.UnexpectedEndOfFile;
 }
 
+pub fn isPrimitiveType(self: *const Protocol, typeName: []const u8) bool {
+    for (self.xidtypes.items) |e| {
+        if (std.mem.eql(u8, e, typeName)) return true;
+    }
+
+    inline for (@as([]const []const u8, &.{
+        "CARD8",  "BYTE",
+        "BOOL",   "void",
+        "CARD16", "CARD32",
+        "CARD64", "INT8",
+        "INT16",  "INT32",
+        "INT64",  "char",
+        "float",  "double",
+    })) |t| {
+        if (std.mem.eql(u8, typeName, t)) return true;
+    }
+    return false;
+}
+
 pub fn hasType(self: *const Protocol, typeName: []const u8) bool {
     for (self.enums.items) |e| {
         if (std.mem.eql(u8, e.name, typeName)) return true;

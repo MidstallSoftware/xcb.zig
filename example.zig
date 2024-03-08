@@ -15,6 +15,9 @@ pub fn main() !void {
 
         while (monitorsIter.next()) |monitor| {
             std.debug.print("{}\n", .{monitor});
+            for (monitor.outputs()) |output| {
+                std.debug.print("{}\n", .{output});
+            }
         }
     }
 
