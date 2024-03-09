@@ -355,21 +355,22 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
 
             try fmtFields(proto, req.reply.items, name.items, req.name, if (req.reply.items[0] == .pad) 1 else 0, 1, width + 2, writer);
 
-            const hasFds = blk: {
+            const fdCount = blk: {
+                var fds: usize = 0;
                 for (req.reply.items) |f| {
-                    if (f == .fd) break :blk true;
+                    if (f == .fd) fds += 1;
                 }
-                break :blk false;
+                break :blk fds;
             };
 
-            if (hasFds) {
+            if (fdCount > 0) {
                 try writer.writeAll("\n");
                 try writer.writeByteNTimes(' ', width + 2);
                 try writer.writeAll("extern fn ");
                 try fmtExtFuncName(proto.extName, name.items, writer);
                 try writer.writeAll("_fds(*const xcb.Connection, *const ");
                 try writer.writeAll(name.items);
-                try writer.writeAll(") ?[*:0]const c_int;\n\n");
+                try writer.writeAll(") ?[*]const c_int;\n\n");
 
                 try writer.writeByteNTimes(' ', width + 2);
                 try writer.writeAll("pub fn fds(self: *const ");
@@ -382,7 +383,9 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
                 try writer.writeAll("_fds(conn, self) orelse return null;\n");
 
                 try writer.writeByteNTimes(' ', width + 4);
-                try writer.writeAll("return std.mem.sliceTo(fdsValue, 0);\n");
+                try writer.writeAll("return fdsValue[0..");
+                try std.fmt.formatInt(fdCount, 10, .lower, .{}, writer);
+                try writer.writeAll("];\n");
 
                 try writer.writeByteNTimes(' ', width + 2);
                 try writer.writeAll("}\n");
