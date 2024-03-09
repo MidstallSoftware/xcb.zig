@@ -68,6 +68,7 @@ pub const Connection = extern struct {
     extern fn xcb_flush(*Connection) c_int;
     pub fn flush(self: *Connection) !void {
         return switch (std.c.getErrno(xcb_flush(self))) {
+            .SUCCESS => {},
             else => |err| std.os.unexpectedErrno(err),
         };
     }
