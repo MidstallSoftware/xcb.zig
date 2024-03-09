@@ -70,6 +70,7 @@ pub const Value = union(enum) {
     enumref: EnumRef,
     bitcase: NamedValue,
     @"switch": NamedValue,
+    fd: Field.Fd,
 
     pub fn deinit(self: *Value, alloc: Allocator) void {
         switch (self.*) {
@@ -117,6 +118,7 @@ pub const Value = union(enum) {
             .field => .{ .field = try Field.Default.parse(self, parser) },
             .pad => .{ .pad = try Field.Pad.parse(self, parser) },
             .list => .{ .list = try Field.List.parse(self, parser) },
+            .fd => .{ .fd = try Field.Fd.parse(self, parser) },
             inline .op, .unop => |v| @unionInit(Value, @tagName(v), try Op.parse(self, parser)),
             inline .@"switch", .bitcase => |v| @unionInit(Value, @tagName(v), try NamedValue.parse(self, parser)),
             inline .popcount => |v| blk: {
@@ -136,7 +138,7 @@ pub const Value = union(enum) {
                 errdefer self.allocator.free(valueStr);
 
                 break :blk switch (kind) {
-                    .op, .unop, .popcount, .field, .pad, .list, .@"switch", .bitcase, .enumref => unreachable,
+                    .op, .unop, .popcount, .field, .pad, .list, .@"switch", .bitcase, .enumref, .fd => unreachable,
                     inline .value => |v| @unionInit(Value, @tagName(v), try std.fmt.parseInt(usize, valueStr, 10)),
                     inline else => |k| @unionInit(Value, @tagName(k), valueStr),
                 };
@@ -191,6 +193,7 @@ pub const Field = union(enum) {
     field: Default,
     pad: Pad,
     list: List,
+    fd: Fd,
 
     pub const Default = struct {
         type: []const u8,
@@ -358,6 +361,25 @@ pub const Field = union(enum) {
         }
     };
 
+    pub const Fd = struct {
+        name: []const u8,
+
+        pub fn deinit(self: Fd, alloc: Allocator) void {
+            alloc.free(self.name);
+        }
+
+        pub fn parse(self: *Protocol, parser: *xml.Parser) Protocol.ParseError!Fd {
+            const ev = parser.next() orelse return error.UnexpectedEndOfFile;
+            if (ev != .attribute) return error.UnexpectedEvent;
+            if (!std.mem.eql(u8, ev.attribute.name, "name")) return error.UnknownAttribute;
+
+            const valueStr = try ev.attribute.dupeValue(self.allocator);
+            errdefer self.allocator.free(valueStr);
+
+            return .{ .name = valueStr };
+        }
+    };
+
     pub fn deinit(self: Field, alloc: Allocator) void {
         switch (self) {
             .pad => {},
@@ -398,6 +420,7 @@ pub const Field = union(enum) {
             .field => .{ .field = try Default.parse(self, parser) },
             .list => .{ .list = try List.parse(self, parser) },
             .pad => .{ .pad = try Pad.parse(self, parser) },
+            .fd => .{ .fd = try Fd.parse(self, parser) },
         };
     }
 };

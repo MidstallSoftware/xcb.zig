@@ -110,7 +110,11 @@ pub fn fmtField(proto: *const Protocol, padNumber: usize, field: *const Protocol
             }
 
             try writer.writeAll(": ");
-            try fmtTypeName(proto, v.type, writer);
+            if (@hasField(@TypeOf(v), "type")) {
+                try fmtTypeName(proto, v.type, writer);
+            } else if (field.* == .fd) {
+                try writer.writeAll("std.os.fd_t");
+            }
             try writer.writeAll(",\n");
         },
     }
@@ -340,7 +344,7 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
             try name.appendSlice(req.name);
             try name.appendSlice("Reply");
 
-            try writer.writeByteNTimes(' ', width);
+            try writer.writeByteNTimes(' ', width + 2);
             try fmtField(proto, 0, &req.reply.items[0], width + 2, writer);
 
             try writer.writeByteNTimes(' ', width + 2);
@@ -350,6 +354,39 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
             try writer.writeAll("length: u32,\n");
 
             try fmtFields(proto, req.reply.items, name.items, req.name, if (req.reply.items[0] == .pad) 1 else 0, 1, width + 2, writer);
+
+            const hasFds = blk: {
+                for (req.reply.items) |f| {
+                    if (f == .fd) break :blk true;
+                }
+                break :blk false;
+            };
+
+            if (hasFds) {
+                try writer.writeAll("\n");
+                try writer.writeByteNTimes(' ', width + 2);
+                try writer.writeAll("extern fn ");
+                try fmtExtFuncName(proto.extName, name.items, writer);
+                try writer.writeAll("_fds(*const xcb.Connection, *const ");
+                try writer.writeAll(name.items);
+                try writer.writeAll(") ?[*:0]const c_int;\n\n");
+
+                try writer.writeByteNTimes(' ', width + 2);
+                try writer.writeAll("pub fn fds(self: *const ");
+                try writer.writeAll(name.items);
+                try writer.writeAll(", conn: *const xcb.Connection) ?[]const c_int {\n");
+
+                try writer.writeByteNTimes(' ', width + 4);
+                try writer.writeAll("const fdsValue = ");
+                try fmtExtFuncName(proto.extName, name.items, writer);
+                try writer.writeAll("_fds(conn, self) orelse return null;\n");
+
+                try writer.writeByteNTimes(' ', width + 4);
+                try writer.writeAll("return std.mem.sliceTo(fdsValue, 0);\n");
+
+                try writer.writeByteNTimes(' ', width + 2);
+                try writer.writeAll("}\n");
+            }
         }
 
         try writer.writeByteNTimes(' ', width);
@@ -429,7 +466,11 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
                     try writer.writeAll("[*]const ");
                 }
 
-                try fmtTypeName(proto, v.type, writer);
+                if (@hasField(@TypeOf(v), "type")) {
+                    try fmtTypeName(proto, v.type, writer);
+                } else if (field == .fd) {
+                    try writer.writeAll("std.os.fd_t");
+                }
             },
         }
     }

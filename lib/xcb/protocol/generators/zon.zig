@@ -165,6 +165,18 @@ pub fn fmtFieldList(field: *const Protocol.Field.List, width: usize, writer: any
     try writer.writeByte('}');
 }
 
+pub fn fmtFieldFd(field: *const Protocol.Field.Fd, width: usize, writer: anytype) @TypeOf(writer).Error!void {
+    try writer.writeAll(@typeName(Protocol.Field.Fd) ++ "{\n");
+
+    try writer.writeByteNTimes(' ', width);
+    try writer.writeAll(".name = \"");
+    try writer.writeAll(field.name);
+    try writer.writeAll("\",\n");
+
+    try writer.writeByteNTimes(' ', width - 2);
+    try writer.writeByte('}');
+}
+
 pub fn fmtField(field: *const Protocol.Field, width: usize, writer: anytype) @TypeOf(writer).Error!void {
     try writer.writeAll(@typeName(Protocol.Field) ++ "{\n");
 
@@ -177,6 +189,7 @@ pub fn fmtField(field: *const Protocol.Field, width: usize, writer: anytype) @Ty
         .field => |*v| try fmtFieldDefault(v, width, writer),
         .pad => |*v| try fmtFieldPad(v, width, writer),
         .list => |*v| try fmtFieldList(v, width, writer),
+        .fd => |*v| try fmtFieldFd(v, width, writer),
     }
 
     try writer.writeAll(",\n");
