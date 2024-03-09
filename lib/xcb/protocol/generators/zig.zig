@@ -114,6 +114,8 @@ pub fn fmtField(proto: *const Protocol, padNumber: usize, field: *const Protocol
                 try fmtTypeName(proto, v.type, writer);
             } else if (field.* == .fd) {
                 try writer.writeAll("std.os.fd_t");
+            } else if (field.* == .@"switch") {
+                try writer.writeAll("[*:0] const u32");
             }
             try writer.writeAll(",\n");
         },
@@ -473,6 +475,8 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
                     try fmtTypeName(proto, v.type, writer);
                 } else if (field == .fd) {
                     try writer.writeAll("std.os.fd_t");
+                } else if (field == .@"switch") {
+                    try writer.writeAll("[*:0] const u32");
                 }
             },
         }

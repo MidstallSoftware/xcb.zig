@@ -13,11 +13,11 @@ pub const EnumRef = struct {
     }
 
     pub fn parse(self: *Protocol, parser: *xml.Parser) Protocol.ParseError!EnumRef {
-        const ev1 = parser.next() orelse error.UnexpectedEndOfFile;
+        const ev1 = parser.next() orelse return error.UnexpectedEndOfFile;
         if (ev1 != .attribute) return error.UnexpectedEvent;
         if (!std.mem.eql(u8, ev1.attribute.name, "ref")) return error.UnknownAttribute;
 
-        const ev2 = parser.next() orelse error.UnexpectedEndOfFile;
+        const ev2 = parser.next() orelse return error.UnexpectedEndOfFile;
         if (ev2 != .character_data) return error.UnexpectedEvent;
 
         return .{
@@ -64,11 +64,11 @@ pub const Value = union(enum) {
     op: Op,
     unop: Op,
     popcount: *Value,
+    bitcase: *Value,
     field: Field.Default,
     pad: Field.Pad,
     list: Field.List,
     enumref: EnumRef,
-    bitcase: NamedValue,
     @"switch": NamedValue,
     fd: Field.Fd,
 
@@ -76,8 +76,8 @@ pub const Value = union(enum) {
         switch (self.*) {
             .fieldref => |fieldref| alloc.free(fieldref),
             .op, .unop => |*op| op.deinit(alloc),
-            .popcount => |popcount| popcount.deinit(alloc),
-            .bitcase, .@"switch" => |*nv| nv.deinit(alloc),
+            .bitcase, .popcount => |popcount| popcount.deinit(alloc),
+            .@"switch" => |*nv| nv.deinit(alloc),
             .field => |field| field.deinit(alloc),
             .list => |*list| list.deinit(alloc),
             .enumref => |ef| ef.deinit(alloc),
@@ -119,9 +119,10 @@ pub const Value = union(enum) {
             .pad => .{ .pad = try Field.Pad.parse(self, parser) },
             .list => .{ .list = try Field.List.parse(self, parser) },
             .fd => .{ .fd = try Field.Fd.parse(self, parser) },
+            .enumref => .{ .enumref = try EnumRef.parse(self, parser) },
             inline .op, .unop => |v| @unionInit(Value, @tagName(v), try Op.parse(self, parser)),
-            inline .@"switch", .bitcase => |v| @unionInit(Value, @tagName(v), try NamedValue.parse(self, parser)),
-            inline .popcount => |v| blk: {
+            inline .@"switch" => |v| @unionInit(Value, @tagName(v), try NamedValue.parse(self, parser)),
+            inline .popcount, .bitcase => |v| blk: {
                 const value = try self.allocator.create(Value);
                 errdefer self.allocator.destroy(value);
 
@@ -194,6 +195,7 @@ pub const Field = union(enum) {
     pad: Pad,
     list: List,
     fd: Fd,
+    @"switch": NamedValue,
 
     pub const Default = struct {
         type: []const u8,
@@ -421,6 +423,7 @@ pub const Field = union(enum) {
             .list => .{ .list = try List.parse(self, parser) },
             .pad => .{ .pad = try Pad.parse(self, parser) },
             .fd => .{ .fd = try Fd.parse(self, parser) },
+            .@"switch" => .{ .@"switch" = try NamedValue.parse(self, parser) },
         };
     }
 };

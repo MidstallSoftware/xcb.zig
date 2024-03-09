@@ -3,6 +3,7 @@ const std = @import("std");
 const mem = std.mem;
 
 pub const Parser = struct {
+    offset: usize = 0,
     document: []const u8,
     current_tag: []const u8 = undefined,
     char_buffer: [4]u8 = undefined,
@@ -31,6 +32,7 @@ pub const Parser = struct {
                     if (mem.indexOf(u8, p.document[2..], "?>")) |end| {
                         const ev = Event{ .processing_instruction = p.document[2 .. end + 2] };
                         p.document = p.document[end + 4 ..];
+                        p.offset += end + 4;
                         return ev;
                     }
                 },
@@ -39,6 +41,7 @@ pub const Parser = struct {
                         if (mem.indexOfScalar(u8, p.document[3..], '>')) |end| {
                             const ev = Event{ .close_tag = p.document[2 .. end + 3] };
                             p.document = p.document[end + 4 ..];
+                            p.offset += end + 4;
                             return ev;
                         }
                     },
@@ -49,6 +52,7 @@ pub const Parser = struct {
                         if (mem.indexOf(u8, p.document[3..], "-->")) |end| {
                             const ev = Event{ .comment = p.document[4 .. end + 3] };
                             p.document = p.document[end + 6 ..];
+                            p.offset += end + 6;
                             return ev;
                         }
                     },
@@ -56,6 +60,7 @@ pub const Parser = struct {
                         if (mem.indexOf(u8, p.document, "]]>")) |end| {
                             const ev = Event{ .character_data = p.document[9..end] };
                             p.document = p.document[end + 3 ..];
+                            p.offset += end + 3;
                             return ev;
                         }
                     },
@@ -68,6 +73,7 @@ pub const Parser = struct {
                         p.current_tag = ev.open_tag;
                         p.document = p.document[space..];
                         p.mode = .attrs;
+                        p.offset += space;
                         return ev;
                     }
                     if (mem.indexOfScalar(u8, p.document[0..angle], '/')) |slash| {
@@ -75,12 +81,14 @@ pub const Parser = struct {
                         p.current_tag = ev.open_tag;
                         p.document = p.document[slash..];
                         p.mode = .attrs;
+                        p.offset += slash;
                         return ev;
                     }
                     const ev = Event{ .open_tag = p.document[1..angle] };
                     p.current_tag = ev.open_tag;
                     p.document = p.document[angle..];
                     p.mode = .attrs;
+                    p.offset += angle;
                     return ev;
                 },
                 else => {},
@@ -99,6 +107,7 @@ pub const Parser = struct {
             '>' => {
                 p.document = p.document[1..];
                 p.mode = .normal;
+                p.offset += 1;
                 return p.nextNormal();
             },
             '/' => {
@@ -107,6 +116,7 @@ pub const Parser = struct {
                     return null;
                 p.document = p.document[2..];
                 p.mode = .normal;
+                p.offset += 2;
                 return ev;
             },
             else => {},
@@ -136,6 +146,7 @@ pub const Parser = struct {
                         },
                     };
                     p.document = p.document[end + 2 ..];
+                    p.offset += end + 2;
                     return ev;
                 }
             },
@@ -152,6 +163,7 @@ pub const Parser = struct {
             if (c == '<' or c == '&') {
                 const ev = Event{ .character_data = p.document[0..i] };
                 p.document = p.document[i..];
+                p.offset += i;
                 p.mode = switch (c) {
                     '<' => .normal,
                     '&' => .entity,
@@ -201,6 +213,7 @@ pub const Parser = struct {
             const n = std.unicode.utf8Encode(@intCast(codepoint), &p.char_buffer) catch return null;
             p.document = p.document[semi + 2 ..];
             p.mode = .chars;
+            p.offset += semi + 2;
             return Event{ .character_data = p.char_buffer[0..n] };
         }
 
@@ -219,6 +232,7 @@ pub const Parser = struct {
             switch (p.peek(0) orelse return) {
                 ' ', '\t', '\n', '\r' => {
                     p.document = p.document[1..];
+                    p.offset += 1;
                 },
                 else => {
                     return;

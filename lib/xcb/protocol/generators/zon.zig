@@ -190,6 +190,7 @@ pub fn fmtField(field: *const Protocol.Field, width: usize, writer: anytype) @Ty
         .pad => |*v| try fmtFieldPad(v, width, writer),
         .list => |*v| try fmtFieldList(v, width, writer),
         .fd => |*v| try fmtFieldFd(v, width, writer),
+        .@"switch" => {},
     }
 
     try writer.writeAll(",\n");
