@@ -338,4 +338,5 @@ test {
     _ = Struct;
     _ = Union;
     _ = XidUnion;
+    _ = generators;
 }

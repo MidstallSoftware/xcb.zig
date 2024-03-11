@@ -13,7 +13,8 @@ fn fmtExtFuncName(extName: ?[]const u8, name: []const u8, writer: anytype) !void
 
     for (name, 0..) |c, i| {
         if (std.ascii.isUpper(c)) {
-            if (i > 0 and (i + 1) < name.len and !std.ascii.isUpper(name[i + 1])) try writer.writeByte('_');
+            if (i > 0 and (((i + 1) < name.len and !std.ascii.isUpper(name[i + 1])) or std.ascii.isLower(name[i - 1]))) try writer.writeByte('_');
+
             try writer.writeByte(std.ascii.toLower(c));
         } else {
             try writer.writeByte(c);
@@ -672,5 +673,21 @@ pub fn fmtProtocols(protos: []const *Protocol, width: usize, writer: anytype) !v
         try writer.writeAll("};");
 
         if (i < (protos.len - 1)) try writer.writeByteNTimes('\n', 2);
+    }
+}
+
+test "Generate correct function names" {
+    {
+        var list = std.ArrayList(u8).init(std.testing.allocator);
+        defer list.deinit();
+        try fmtExtFuncName(null, "CreateWindow", list.writer());
+        try std.testing.expectEqualStrings("xcb_create_window", list.items);
+    }
+
+    {
+        var list = std.ArrayList(u8).init(std.testing.allocator);
+        defer list.deinit();
+        try fmtExtFuncName(null, "CreateGC", list.writer());
+        try std.testing.expectEqualStrings("xcb_create_gc", list.items);
     }
 }
