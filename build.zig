@@ -401,9 +401,7 @@ pub fn build(b: *std.Build) !void {
     const step_test = b.step("test", "Run all unit tests");
 
     const unit_tests = b.addTest(.{
-        .root_source_file = .{
-            .path = b.pathFromRoot("lib/xcb.zig"),
-        },
+        .root_source_file = module.root_source_file.?,
         .target = target,
         .optimize = optimize,
         .link_libc = true,
