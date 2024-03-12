@@ -83,7 +83,7 @@ fn fmtTypeName(proto: *const Protocol, typeName: []const u8, writer: anytype) !v
     } else if (std.mem.eql(u8, typeName, "INT64")) {
         try writer.writeAll("i64");
     } else if (std.mem.eql(u8, typeName, "char")) {
-        try writer.writeAll("c_char");
+        try writer.writeAll("u8");
     } else if (std.mem.eql(u8, typeName, "float")) {
         try writer.writeAll("f32");
     } else if (std.mem.eql(u8, typeName, "double")) {
