@@ -69,3 +69,29 @@ fn parseItem(self: *Protocol, parser: *xml.Parser, e: *Enum) Protocol.ParseError
         .bit = isBit,
     });
 }
+
+pub fn min(self: *const Enum) usize {
+    var i: usize = 0;
+    var iter = self.items.valueIterator();
+    while (iter.next()) |v| {
+        if (v.index < i) i = v.index;
+    }
+    return i;
+}
+
+pub fn max(self: *const Enum) usize {
+    var i: usize = 0;
+    var iter = self.items.valueIterator();
+    while (iter.next()) |v| {
+        if (v.index > i) i = v.index;
+    }
+    return i;
+}
+
+pub fn isBits(self: *const Enum) bool {
+    var iter = self.items.valueIterator();
+    while (iter.next()) |v| {
+        if (!v.bit) return false;
+    }
+    return true;
+}

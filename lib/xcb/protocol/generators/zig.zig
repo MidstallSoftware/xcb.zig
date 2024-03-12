@@ -116,7 +116,7 @@ pub fn fmtField(proto: *const Protocol, padNumber: usize, field: *const Protocol
             } else if (field.* == .fd) {
                 try writer.writeAll("std.os.fd_t");
             } else if (field.* == .@"switch") {
-                try writer.writeAll("[*:0] const u32");
+                try writer.writeAll("[*] const u32");
             }
             try writer.writeAll(",\n");
         },
@@ -477,7 +477,7 @@ pub fn fmtRequest(proto: *const Protocol, req: *const Protocol.Request, width: u
                 } else if (field == .fd) {
                     try writer.writeAll("std.os.fd_t");
                 } else if (field == .@"switch") {
-                    try writer.writeAll("[*:0] const u32");
+                    try writer.writeAll("[*] const u32");
                 }
             },
         }
@@ -529,6 +529,57 @@ pub fn fmtXidUnion(proto: *const Protocol, xidunion: *const Protocol.XidUnion, w
     try writer.writeAll("};\n");
 }
 
+pub fn fmtEnum(proto: *const Protocol, e: *const Protocol.Enum, width: usize, writer: anytype) !void {
+    _ = proto;
+
+    try writer.writeByteNTimes(' ', width);
+    try writer.writeAll("pub const ");
+    try writer.writeAll(e.name);
+    try writer.writeAll(" = ");
+    if (e.isBits()) {
+        try writer.writeAll("struct");
+    } else {
+        try writer.writeAll("enum(");
+
+        {
+            const from = e.min();
+            const to = e.max();
+            if (from == 0 and to == 0) {
+                try writer.writeAll("u0");
+            } else {
+                const signedness: std.builtin.Signedness = if (from < 0) .signed else .unsigned;
+                const largest_positive_integer = @max(if (from < 0) (-from) - 1 else from, to); // two's complement
+                const base = std.math.log2(largest_positive_integer);
+                const upper = (@as(usize, 1) << @intCast(base)) - 1;
+                var magnitude_bits = if (upper >= largest_positive_integer) base else base + 1;
+                if (signedness == .signed) {
+                    magnitude_bits += 1;
+                }
+                try writer.writeByte(@tagName(signedness)[0]);
+                try std.fmt.formatInt(magnitude_bits, 10, .lower, .{}, writer);
+            }
+        }
+
+        try writer.writeByte(')');
+    }
+    try writer.writeAll(" {\n");
+
+    var iter = e.items.iterator();
+    while (iter.next()) |entry| {
+        try writer.writeByteNTimes(' ', width + 2);
+        if (entry.value_ptr.bit) try writer.writeAll("pub const ");
+
+        try std.zig.fmtId(entry.key_ptr.*).format("", .{}, writer);
+        try writer.writeAll(" = ");
+        try std.fmt.formatInt(entry.value_ptr.index, 10, .lower, .{}, writer);
+
+        if (entry.value_ptr.bit) try writer.writeAll(";\n") else try writer.writeAll(",\n");
+    }
+
+    try writer.writeByteNTimes(' ', width);
+    try writer.writeAll("};\n");
+}
+
 pub fn fmtEventStruct(proto: *const Protocol, es: *const Protocol.EventStruct, width: usize, writer: anytype) !void {
     _ = proto;
 
@@ -536,6 +587,23 @@ pub fn fmtEventStruct(proto: *const Protocol, es: *const Protocol.EventStruct, w
     try writer.writeAll("pub const ");
     try writer.writeAll(es.name);
     try writer.writeAll(" = extern union {\n");
+
+    try writer.writeByteNTimes(' ', width);
+    try writer.writeAll("};\n");
+}
+
+pub fn fmtEvent(proto: *const Protocol, ev: *const Protocol.Event, width: usize, writer: anytype) !void {
+    _ = proto;
+
+    try writer.writeByteNTimes(' ', width);
+    try writer.writeAll("pub const ");
+    try writer.writeAll(ev.name);
+    try writer.writeAll(" = extern struct {\n");
+
+    try writer.writeByteNTimes(' ', width + 2);
+    try writer.writeAll("pub const Number = ");
+    try std.fmt.formatInt(ev.number, 10, .lower, .{}, writer);
+    try writer.writeAll(";\n");
 
     try writer.writeByteNTimes(' ', width);
     try writer.writeAll("};\n");
@@ -639,6 +707,11 @@ pub fn fmtProtocol(proto: *const Protocol, width: usize, writer: anytype) !void 
         try fmtXidUnion(proto, xidunion, width, writer);
     }
 
+    for (proto.enums.items) |*e| {
+        try writer.writeAll("\n");
+        try fmtEnum(proto, e, width, writer);
+    }
+
     for (proto.eventstructs.items) |*es| {
         try writer.writeAll("\n");
         try fmtEventStruct(proto, es, width, writer);
@@ -658,6 +731,17 @@ pub fn fmtProtocol(proto: *const Protocol, width: usize, writer: anytype) !void 
         try writer.writeAll("\n");
         try fmtRequest(proto, req, width, writer);
     }
+
+    try writer.writeByteNTimes(' ', width);
+    try writer.writeAll("pub const events = struct {\n");
+
+    for (proto.events.items) |*ev| {
+        try writer.writeAll("\n");
+        try fmtEvent(proto, ev, width + 2, writer);
+    }
+
+    try writer.writeByteNTimes(' ', width);
+    try writer.writeAll("};\n");
 }
 
 pub fn fmtProtocols(protos: []const *Protocol, width: usize, writer: anytype) !void {
