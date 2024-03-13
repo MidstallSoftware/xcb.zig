@@ -593,8 +593,6 @@ pub fn fmtEventStruct(proto: *const Protocol, es: *const Protocol.EventStruct, w
 }
 
 pub fn fmtEvent(proto: *const Protocol, ev: *const Protocol.Event, width: usize, writer: anytype) !void {
-    _ = proto;
-
     try writer.writeByteNTimes(' ', width);
     try writer.writeAll("pub const ");
     try writer.writeAll(ev.name);
@@ -604,6 +602,30 @@ pub fn fmtEvent(proto: *const Protocol, ev: *const Protocol.Event, width: usize,
     try writer.writeAll("pub const Number = ");
     try std.fmt.formatInt(ev.number, 10, .lower, .{}, writer);
     try writer.writeAll(";\n");
+
+    try writer.writeByteNTimes(' ', width + 2);
+    try writer.writeAll("response_type: u8,\n");
+
+    {
+        var name = std.ArrayList(u8).init(proto.allocator);
+        defer name.deinit();
+        try name.appendSlice("events.");
+        try name.appendSlice(ev.name);
+
+        try writer.writeByteNTimes(' ', width + 2);
+        if (ev.fields.items.len > 0) {
+            try fmtField(proto, 0, &ev.fields.items[0], width + 2, writer);
+        } else {
+            try writer.writeAll("pad0: u8,\n");
+        }
+
+        try writer.writeByteNTimes(' ', width + 2);
+        try writer.writeAll("sequence: u16,\n");
+
+        if (ev.fields.items.len > 1) {
+            try fmtFields(proto, ev.fields.items, name.items, ev.name, if (ev.fields.items[0] == .pad) 1 else 0, 1, width + 2, writer);
+        }
+    }
 
     try writer.writeByteNTimes(' ', width);
     try writer.writeAll("};\n");

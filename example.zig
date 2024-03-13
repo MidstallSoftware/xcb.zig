@@ -110,7 +110,8 @@ pub fn main() !void {
 
     while (conn.waitForEvent() catch null) |ev| {
         if (ev.response_type == 12) {
-            std.debug.print("{}\n", .{ev});
+            const exposeEvent: *xcb.xproto.events.Expose = @ptrCast(@alignCast(ev));
+            std.debug.print("{}\n", .{exposeEvent});
         }
     }
 }
